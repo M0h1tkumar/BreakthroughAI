@@ -63,12 +63,7 @@ export function AppSidebar() {
       label: 'Search', 
       path: '/search' 
     },
-    { 
-      icon: TrendingUp, 
-      label: 'Analytics', 
-      path: '/analytics',
-      roles: ['DOCTOR']
-    },
+
     { 
       icon: Settings, 
       label: 'Settings', 

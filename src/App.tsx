@@ -31,8 +31,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isAuthenticated = authService.isAuthenticated();
   
   if (!user || !isAuthenticated) {
-    window.location.href = '/login';
-    return null;
+    return <Login />;
   }
   return <>{children}</>;
 };
@@ -41,19 +40,27 @@ const RoleBasedDashboard = () => {
   const user = authService.getCurrentUser();
   
   if (!user) {
-    window.location.href = '/login';
-    return null;
+    return <Login />;
   }
   
-  switch (user.role) {
-    case 'DOCTOR':
-      return <DoctorDashboard />;
-    case 'PATIENT':
-      return <PatientDashboard />;
-    case 'PHARMACY':
-      return <PharmacyDashboard />;
-    default:
-      return <Dashboard />;
+  try {
+    // Check if user is admin
+    if (localStorage.getItem('isAdmin') === 'true') {
+      return <AdminDashboard />;
+    }
+    
+    switch (user.role) {
+      case 'DOCTOR':
+        return <DoctorDashboard />;
+      case 'PATIENT':
+        return <PatientDashboard />;
+      case 'PHARMACY':
+        return <PharmacyDashboard />;
+      default:
+        return <div className="p-8"><h1>Welcome {user.email}</h1><p>Role: {user.role}</p></div>;
+    }
+  } catch (error) {
+    return <div className="p-8"><h1>Welcome {user.email}</h1><p>Role: {user.role}</p></div>;
   }
 };
 
@@ -61,8 +68,7 @@ const RoleBasedSettings = () => {
   const user = authService.getCurrentUser();
   
   if (!user) {
-    window.location.href = '/login';
-    return null;
+    return <Login />;
   }
   
   switch (user.role) {
