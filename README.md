@@ -45,11 +45,12 @@ That's all — the commands above are enough to run and build the app locally.
 ## Medical Compliance Features
 
 ### 🚨 Emergency Features
-- **Emergency Button**: Prominent red button on login page - no login required
-- **GPS Location**: Auto-detects user coordinates for emergency response
-- **Real-time Alerts**: Instant notifications to all active doctor dashboards
-- **Emergency Details**: Collects situation description, location, and contact info
-- **Multi-channel Response**: Alerts doctors, emergency services, and ambulance dispatch
+- **Emergency Button**: Prominent red button on login page - no login required, accessible to anyone
+- **GPS Location**: Auto-detects user coordinates with fallback for manual entry
+- **Real-time Alerts**: Instant notifications appear on all active doctor dashboards with visual indicators
+- **Emergency Details**: Collects situation description, precise location, and contact information
+- **Multi-channel Response**: Alerts doctors, emergency services, and ambulance dispatch with location data
+- **Emergency Dashboard**: Doctors see emergency alerts with call and dispatch buttons for immediate action
 
 ### 🚫 AI Access Control
 - **Doctor-Only AI**: AI Council accessible only to licensed doctors
@@ -95,8 +96,8 @@ That's all — the commands above are enough to run and build the app locally.
 - **Inventory Tracking**: Medicine stock management
 - **Patient Communication**: WhatsApp integration for prescription notifications
 
-## Recent Updates
-- **🚨 Emergency System**: Added emergency button on login page with GPS location access and real-time doctor alerts
+## Recent Updates (Latest Commit: 83a26f1)
+- **🚨 Emergency System**: Emergency button on login page with GPS auto-detection and real-time doctor alerts
 - **📱 Patient Health Reports**: Voice input (multilingual), image upload, automatic specialist assignment
 - **👨‍⚕️ Doctor Dashboard**: Patient management, AI diagnosis, prescription system, emergency alerts
 - **💊 Pharmacy Integration**: Prescription management linked to doctor prescriptions
