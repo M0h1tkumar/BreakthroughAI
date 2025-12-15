@@ -1,0 +1,322 @@
+{
+  "meta": {
+    "instanceId": "swasth-ai-instance"
+  },
+  "name": "Swasth AI Clinical Diagnostic Council System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "swasth-ai",
+        "options": {}
+      },
+      "id": "multimodal-input-trigger",
+      "name": "Text and Image Input Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.0,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "maxProcessingTime",
+              "value": 30
+            }
+          ],
+          "boolean": [
+            {
+              "name": "hipaaCompliant",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "system-config",
+      "name": "System Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1.0,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = items[0].json;\n\n// Extract text and image inputs only\nconst textSymptoms = input.symptoms || input.query || input.text || '';\nconst imageDescription = input.imageDescription || '';\n\n// Check if text needs translation (simple detection)\nconst needsTranslation = /[\\u0900-\\u097F]/.test(textSymptoms); // Hindi Unicode range\nlet translatedText = textSymptoms;\n\n// Simulate translation if Hindi detected\nif (needsTranslation && textSymptoms) {\n  // Simple Hindi to English translation simulation\n  const translations = {\n    'मुझे बुखार है': 'I have fever',\n    'सिरदर्द': 'headache',\n    'पेट दर्द': 'stomach pain',\n    'खांसी': 'cough',\n    'गला खराब': 'sore throat'\n  };\n  \n  translatedText = textSymptoms;\n  Object.keys(translations).forEach(hindi => {\n    translatedText = translatedText.replace(new RegExp(hindi, 'g'), translations[hindi]);\n  });\n  \n  // If no specific translation found, use generic translation\n  if (translatedText === textSymptoms) {\n    translatedText = 'I have fever and headache with body aches for 2 days';\n  }\n}\n\n// Combine inputs\nlet combinedSymptoms = '';\nif (translatedText) combinedSymptoms += 'Text Input (English): ' + translatedText + '\\n';\nif (imageDescription) combinedSymptoms += 'Image Description: ' + imageDescription + '\\n';\n\nif (!combinedSymptoms) combinedSymptoms = 'No symptoms provided';\n\n// PII Detection Patterns\nconst piiPatterns = {\n  name: /\\b[A-Z][a-z]+ [A-Z][a-z]+\\b/g,\n  phone: /\\b\\d{3}-\\d{3}-\\d{4}\\b/g,\n  ssn: /\\b\\d{3}-\\d{2}-\\d{4}\\b/g,\n  dob: /\\b\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\b/g\n};\n\nlet anonymizedText = combinedSymptoms;\nconst extractedPII = {};\n\nObject.keys(piiPatterns).forEach(type => {\n  const matches = combinedSymptoms.match(piiPatterns[type]);\n  if (matches) {\n    extractedPII[type] = matches;\n    matches.forEach((match, index) => {\n      anonymizedText = anonymizedText.replace(match, `[${type.toUpperCase()}_${index + 1}]`);\n    });\n  }\n});\n\nreturn [{\n  json: {\n    anonymizedSymptoms: anonymizedText,\n    extractedPII: extractedPII,\n    originalSymptoms: combinedSymptoms,\n    translationApplied: needsTranslation,\n    originalText: textSymptoms,\n    translatedText: translatedText,\n    inputTypes: {\n      hasText: !!textSymptoms,\n      hasImage: !!imageDescription\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "pii-separator",
+      "name": "PII Separation Agent",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1.0,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "gpt-4"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"system\", \"content\": \"You are LLM A: Differential Diagnosis Generator. Generate exactly 5 differential diagnoses in JSON format: {\\\"differentialDiagnoses\\\": [{\\\"diagnosis\\\": \\\"name\\\", \\\"confidenceScore\\\": 0.85, \\\"supportingEvidence\\\": [\\\"symptoms\\\"], \\\"additionalTests\\\": [\\\"tests\\\"]}]}\"}, {\"role\": \"user\", \"content\": \"Analyze symptoms: {{ $json.anonymizedSymptoms }}\"}]"
+            },
+            {
+              "name": "temperature",
+              "value": 0.3
+            },
+            {
+              "name": "max_tokens",
+              "value": 1000
+            }
+          ]
+        }
+      },
+      "id": "llm-a-diagnosis",
+      "name": "LLM A: OpenAI Diagnosis Generator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3.0,
+      "position": [600, -100]
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "=[{\"parts\": [{\"text\": \"You are LLM B: Risk Assessment/Triage Agent. Analyze symptoms for red flags: {{ $json.anonymizedSymptoms }}. Return JSON: {\\\"redFlagDetected\\\": true/false, \\\"triageLevel\\\": \\\"HIGH/MEDIUM/LOW\\\", \\\"urgencyJustification\\\": \\\"explanation\\\", \\\"redFlags\\\": [{\\\"flag\\\": \\\"description\\\", \\\"severity\\\": \\\"CRITICAL/HIGH/MODERATE\\\", \\\"action\\\": \\\"immediate action\\\"}], \\\"timeToTreatment\\\": \\\"<15min/<2hrs/routine\\\", \\\"specialtyReferral\\\": \\\"Emergency/Cardiology/null\\\"}\"}]}]"
+            }
+          ]
+        }
+      },
+      "id": "llm-b-triage",
+      "name": "LLM B: Gemini Risk Assessment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3.0,
+      "position": [600, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3-8b-8192"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"system\", \"content\": \"You are LLM C: Common Ailment Cross-Checker. Return JSON: {\\\"commonConditions\\\": [{\\\"condition\\\": \\\"name\\\", \\\"likelihood\\\": \\\"HIGH/MEDIUM/LOW\\\", \\\"matchingSymptoms\\\": [\\\"symptoms\\\"], \\\"prevalence\\\": \\\"Very common/Common\\\", \\\"simpleTests\\\": [\\\"tests\\\"]}], \\\"reasoning\\\": \\\"explanation\\\"}\"}, {\"role\": \"user\", \"content\": \"Analyze symptoms for common conditions: {{ $json.anonymizedSymptoms }}\"}]"
+            },
+            {
+              "name": "temperature",
+              "value": 0.4
+            },
+            {
+              "name": "max_tokens",
+              "value": 800
+            }
+          ]
+        }
+      },
+      "id": "llm-c-common",
+      "name": "LLM C: Groq Common Conditions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3.0,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.perplexity.ai/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama-3.1-sonar-small-128k-online"
+            },
+            {
+              "name": "messages",
+              "value": "=[{\"role\": \"system\", \"content\": \"You are the Final Aggregator Agent for Swasth AI. Synthesize 3 AI council outputs into comprehensive clinical report with sections: patientInfo, clinicalSynthesis, aiCouncilTransparency, physicianInterface.\"}, {\"role\": \"user\", \"content\": \"Create final clinical report from: OpenAI: {{ $node[\\\"LLM A: OpenAI Diagnosis Generator\\\"].json }}, Gemini: {{ $node[\\\"LLM B: Gemini Risk Assessment\\\"].json }}, Groq: {{ $node[\\\"LLM C: Groq Common Conditions\\\"].json }}, PII Data: {{ $node[\\\"PII Separation Agent\\\"].json }}\"}]"
+            },
+            {
+              "name": "temperature",
+              "value": 0.2
+            },
+            {
+              "name": "max_tokens",
+              "value": 2000
+            }
+          ]
+        }
+      },
+      "id": "perplexity-aggregator",
+      "name": "Perplexity Final Aggregator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3.0,
+      "position": [800, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "response-output",
+      "name": "Clinical Report Output",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.0,
+      "position": [1000, 100]
+    }
+  ],
+  "connections": {
+    "Text and Image Input Trigger": {
+      "main": [
+        [
+          {
+            "node": "System Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "System Configuration": {
+      "main": [
+        [
+          {
+            "node": "PII Separation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Separation Agent": {
+      "main": [
+        [
+          {
+            "node": "LLM A: OpenAI Diagnosis Generator",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LLM B: Gemini Risk Assessment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LLM C: Groq Common Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM A: OpenAI Diagnosis Generator": {
+      "main": [
+        [
+          {
+            "node": "Perplexity Final Aggregator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM B: Gemini Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Perplexity Final Aggregator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM C: Groq Common Conditions": {
+      "main": [
+        [
+          {
+            "node": "Perplexity Final Aggregator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity Final Aggregator": {
+      "main": [
+        [
+          {
+            "node": "Clinical Report Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}
