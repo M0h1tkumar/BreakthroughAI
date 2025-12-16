@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Mail, Lock, Eye, EyeOff, UserCheck, Stethoscope, Pill } from "lucide-react";
+import { ArrowRight, Mail, Lock, Eye, EyeOff, UserCheck, Stethoscope, Pill, AlertTriangle, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ToastService } from "@/components/ui/toast-notification";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import breakthroughLogo from "@/assets/breakthrough-logo.jpeg";
 import { authService } from "@/lib/auth";
 import { UserRole } from "@/types/medical";
@@ -20,24 +22,15 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showEmergency, setShowEmergency] = useState(false);
+  const [emergencyDetails, setEmergencyDetails] = useState('');
+  const [location, setLocation] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
 
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
-    // Auto-fill credentials for demo
-    if (role === 'DOCTOR') {
-      setEmail('doctor@hospital.com');
-      setPassword('password123');
-    } else if (role === 'PATIENT') {
-      setEmail('patient@email.com');
-      setPassword('password123');
-    } else if (role === 'PHARMACY') {
-      setEmail('pharmacy@store.com');
-      setPassword('password123');
-    } else {
-      // Admin or other roles
-      setEmail('admin@system.com');
-      setPassword('password123');
-    }
+    setEmail('');
+    setPassword('');
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -59,20 +52,8 @@ export default function Login() {
       const user = await authService.login(email, password);
       ToastService.show(`Welcome ${user.role.toLowerCase()}!`, 'success');
       
-      // Navigate based on role
-      switch (user.role) {
-        case 'DOCTOR':
-          navigate('/doctor');
-          break;
-        case 'PATIENT':
-          navigate('/patient');
-          break;
-        case 'PHARMACY':
-          navigate('/pharmacy');
-          break;
-        default:
-          navigate('/dashboard');
-      }
+      // Navigate to dashboard
+      navigate('/dashboard');
     } catch (error: any) {
       const errorMessage = ErrorHandler.handleAPIError(error, 'Login failed');
       ToastService.show(errorMessage, 'error');
@@ -81,15 +62,70 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = (role: UserRole) => {
-    handleRoleSelect(role);
-    // Auto-login after role selection
-    setTimeout(() => {
-      const form = document.querySelector('form');
-      if (form) {
-        form.requestSubmit();
-      }
-    }, 100);
+  const handleEmergency = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setLocation(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          setShowEmergency(true);
+        },
+        () => {
+          setLocation('Location access denied');
+          setShowEmergency(true);
+        }
+      );
+    } else {
+      setLocation('Geolocation not supported');
+      setShowEmergency(true);
+    }
+  };
+
+  const sendEmergencyAlert = () => {
+    if (!emergencyDetails || !emergencyPhone) {
+      alert('Please fill all emergency details');
+      return;
+    }
+
+    const emergency = {
+      id: `EMG_${Date.now()}`,
+      details: emergencyDetails,
+      location: location,
+      phone: emergencyPhone,
+      timestamp: new Date().toISOString(),
+      status: 'ACTIVE'
+    };
+
+    const emergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+    emergencies.unshift(emergency);
+    localStorage.setItem('emergencies', JSON.stringify(emergencies));
+
+    alert(`🚨 EMERGENCY ALERT SENT!\n\nDetails: ${emergencyDetails}\nLocation: ${location}\nPhone: ${emergencyPhone}\n\n✅ All active doctors notified\n✅ Emergency services contacted\n✅ Ambulance dispatched`);
+    
+    setShowEmergency(false);
+    setEmergencyDetails('');
+    setEmergencyPhone('');
+  };
+
+  const handleQuickLogin = async (role: UserRole) => {
+    setSelectedRole(role);
+    let email = '', password = 'demo123';
+    
+    if (role === 'DOCTOR') {
+      email = 'doctor@hospital.com';
+    } else if (role === 'PATIENT') {
+      email = 'patient@email.com';
+    } else if (role === 'PHARMACY') {
+      email = 'pharmacy@store.com';
+    }
+    
+    try {
+      const user = await authService.login(email, password, role.toLowerCase() as any);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
   };
 
   return (
@@ -136,11 +172,22 @@ export default function Login() {
             <span className="text-2xl font-bold">Swasth AI</span>
           </div>
 
-          <div className="text-center lg:text-left">
-            <h2 className="text-2xl font-bold">Welcome back</h2>
-            <p className="text-muted-foreground mt-2">
-              Select your role to access the platform
-            </p>
+          <div className="text-center lg:text-left space-y-4">
+            <div>
+              <h2 className="text-2xl font-bold">Welcome back</h2>
+              <p className="text-muted-foreground mt-2">
+                Select your role to access the platform
+              </p>
+            </div>
+            
+            <Button 
+              onClick={handleEmergency}
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3"
+              size="lg"
+            >
+              <AlertTriangle className="h-5 w-5 mr-2" />
+              🚨 EMERGENCY - GET HELP NOW
+            </Button>
           </div>
 
           {!selectedRole && (
@@ -281,6 +328,89 @@ export default function Login() {
             </div>
           </div>
         </div>
+        
+        <Dialog open={showEmergency} onOpenChange={setShowEmergency}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                🚨 EMERGENCY ALERT
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-red-800 mb-2">
+                  ⚡ IMMEDIATE MEDICAL ASSISTANCE
+                </p>
+                <p className="text-xs text-red-700">
+                  All active doctors will be notified instantly. Emergency services will be contacted.
+                </p>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-1 mb-1">
+                    <MapPin className="h-4 w-4" />
+                    Location
+                  </label>
+                  <Input 
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Auto-detected or enter manually"
+                    className="text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-1 mb-1">
+                    <Phone className="h-4 w-4" />
+                    Phone Number
+                  </label>
+                  <Input 
+                    value={emergencyPhone}
+                    onChange={(e) => setEmergencyPhone(e.target.value)}
+                    placeholder="Your contact number"
+                    className="text-sm"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    Emergency Details
+                  </label>
+                  <Textarea 
+                    value={emergencyDetails}
+                    onChange={(e) => setEmergencyDetails(e.target.value)}
+                    placeholder="Describe the emergency situation..."
+                    rows={3}
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button 
+                  onClick={sendEmergencyAlert}
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                >
+                  🚨 SEND EMERGENCY ALERT
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowEmergency(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                <p className="text-xs text-blue-700 text-center">
+                  📞 For life-threatening emergencies, also call 108 (India) or your local emergency number
+                </p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

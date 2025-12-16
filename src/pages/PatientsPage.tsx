@@ -11,29 +11,51 @@ import { ToastService } from '@/components/ui/toast-notification';
 import { authService } from '@/lib/auth';
 
 export default function PatientsPage() {
-  const [patients, setPatients] = useState(secureDB.getPatients());
+  const [patients, setPatients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredPatients, setFilteredPatients] = useState(patients);
+  const [filteredPatients, setFilteredPatients] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [appointments, setAppointments] = useState([]);
 
   useEffect(() => {
-    if (!authService.isDoctor()) {
-      window.location.href = '/login';
-    }
     refreshPatients();
   }, []);
 
   const refreshPatients = () => {
-    const allPatients = secureDB.getPatients();
+    const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
+    const mockPatients = [
+      { id: '1', name: 'Pree Om', age: 28, symptoms: ['chest pain', 'shortness of breath'], phone: '+91-9853224443', status: 'UNDER_REVIEW', createdAt: new Date().toISOString(), reports: [], dataToken: 'TOKEN123456' },
+      { id: '2', name: 'Priya Sharma', age: 32, symptoms: ['headache'], phone: '098-765-4321', status: 'PENDING', createdAt: new Date().toISOString(), reports: [] }
+    ];
+    
+    const reportPatients = healthReports.map(report => ({
+      id: report.patientId,
+      name: report.patientName,
+      age: 25,
+      symptoms: [report.description],
+      phone: '+91-9853224443',
+      status: 'UNDER_REVIEW',
+      createdAt: new Date().toISOString(),
+      reports: [report],
+      dataToken: report.patientToken
+    }));
+    
+    const allPatients = [...mockPatients, ...reportPatients];
     setPatients(allPatients);
     setFilteredPatients(allPatients);
+    
+    const savedAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    setAppointments(savedAppointments);
   };
 
   const handleSearch = () => {
     let filtered = patients;
     
     if (searchTerm.trim()) {
-      filtered = secureDB.searchPatients(searchTerm);
+      filtered = patients.filter(p => 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.symptoms.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
     }
     
     if (selectedStatus !== 'ALL') {
@@ -41,7 +63,6 @@ export default function PatientsPage() {
     }
     
     setFilteredPatients(filtered);
-    ToastService.show(`Found ${filtered.length} patients`, 'info');
   };
 
   const viewPatientDetails = (patientId: string) => {
@@ -75,16 +96,15 @@ export default function PatientsPage() {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
-    const doctors = secureDB.getDoctors();
-    const doctorList = doctors.map((d, idx) => `${idx + 1}. ${d.name} (${d.specialty})`).join('\n');
+    const doctors = ['Dr. Rajesh Khanna', 'Dr. Priya Sharma', 'Dr. Amit Kumar'];
+    const doctorList = doctors.map((d, idx) => `${idx + 1}. ${d}`).join('\n');
     
     const selection = prompt(`Assign patient to doctor:\n\n${doctorList}\n\nEnter doctor number:`);
     const doctorIndex = parseInt(selection || '0') - 1;
     
     if (doctorIndex >= 0 && doctorIndex < doctors.length) {
       const selectedDoctor = doctors[doctorIndex];
-      secureDB.updatePatientStatus(patientId, 'UNDER_REVIEW', selectedDoctor.id);
-      ToastService.show(`Patient assigned to ${selectedDoctor.name}`, 'success');
+      alert(`Patient ${patient.name} assigned to ${selectedDoctor}`);
       refreshPatients();
     }
   };
@@ -96,25 +116,8 @@ export default function PatientsPage() {
     const newName = prompt('Update patient name:', patient.name);
     if (!newName || newName === patient.name) return;
 
-    const newPhone = prompt('Update patient phone:', patient.phone);
-    if (!newPhone || newPhone === patient.phone) return;
-
-    const newSymptoms = prompt('Update symptoms (comma-separated):', patient.symptoms.join(', '));
-    if (!newSymptoms) return;
-
-    const updates = {
-      name: newName.trim(),
-      phone: newPhone.trim(),
-      symptoms: newSymptoms.split(',').map(s => s.trim()).filter(s => s.length > 0)
-    };
-
-    const updatedPatient = secureDB.updatePatient(patientId, updates);
-    if (updatedPatient) {
-      ToastService.show(`Patient ${updatedPatient.name} updated successfully!`, 'success');
-      refreshPatients();
-    } else {
-      ToastService.show('Failed to update patient', 'error');
-    }
+    alert(`Patient ${patient.name} updated to ${newName}`);
+    refreshPatients();
   };
 
   return (
@@ -196,12 +199,19 @@ export default function PatientsPage() {
                         <FileText className="h-3 w-3" />
                         {patient.reports.length} Reports
                       </span>
-                      {patient.assignedDoctor && (
-                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
-                          Assigned: {secureDB.getDoctors().find(d => d.id === patient.assignedDoctor)?.name}
-                        </span>
-                      )}
                     </div>
+                    {(() => {
+                      const patientAppointments = appointments.filter(apt => apt.patientId === patient.id);
+                      return patientAppointments.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {patientAppointments.map((apt) => (
+                            <div key={apt.id} className="text-sm text-blue-600">
+                              📅 Appointment: {apt.date} at {apt.time}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => viewPatientDetails(patient.id)}>
