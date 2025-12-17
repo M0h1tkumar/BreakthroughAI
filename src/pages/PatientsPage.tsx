@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Users, Search, Phone, Calendar, FileText, Eye, Edit } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Users, Search, Phone, Calendar, FileText, Eye, Edit, CheckCircle, XCircle, Download } from 'lucide-react';
 import { secureDB } from '@/lib/secureDatabase';
 import { tokenizationService } from '@/lib/dataTokenization';
 import { ToastService } from '@/components/ui/toast-notification';
@@ -16,6 +18,11 @@ export default function PatientsPage() {
   const [filteredPatients, setFilteredPatients] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [appointments, setAppointments] = useState([]);
+  const [showCaseDialog, setShowCaseDialog] = useState(false);
+  const [selectedPatientForCase, setSelectedPatientForCase] = useState(null);
+  const [showPatientDetailsDialog, setShowPatientDetailsDialog] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState('');
 
   useEffect(() => {
     refreshPatients();
@@ -69,54 +76,60 @@ export default function PatientsPage() {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
-    let details = `PATIENT DETAILS\n\n`;
-    details += `Name: ${patient.name}\n`;
-    details += `Age: ${patient.age}\n`;
-    details += `Phone: ${patient.phone}\n`;
-    details += `Status: ${patient.status}\n`;
-    details += `Symptoms: ${patient.symptoms.join(', ')}\n`;
-    details += `Reports: ${patient.reports.length}\n`;
-    details += `Created: ${new Date(patient.createdAt).toLocaleString()}\n`;
-    
-    if (patient.dataToken) {
-      details += `\n🔐 TOKENIZED DATA:\n`;
-      details += `Token: ${patient.dataToken}\n`;
-      details += `Assigned Doctor: ${patient.assignedDoctor}\n`;
-      
-      const tokenData = tokenizationService.getTokenizedData(patient.dataToken);
-      if (tokenData) {
-        details += `Tokenized: ${tokenData.timestamp}\n`;
-      }
-    }
+    setSelectedPatientForCase(patient);
+    setShowPatientDetailsDialog(true);
+  };
 
-    alert(details);
+  const downloadPatientImage = (imageUrl: string, patientName: string) => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `${patientName}_medical_image.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const assignToDoctor = (patientId: string) => {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
-    const doctors = ['Dr. Rajesh Khanna', 'Dr. Priya Sharma', 'Dr. Amit Kumar'];
-    const doctorList = doctors.map((d, idx) => `${idx + 1}. ${d}`).join('\n');
+    setSelectedPatientForCase(patient);
+    setShowAssignDialog(true);
+  };
+
+  const handleDoctorAssignment = () => {
+    if (!selectedDoctor || !selectedPatientForCase) return;
     
-    const selection = prompt(`Assign patient to doctor:\n\n${doctorList}\n\nEnter doctor number:`);
-    const doctorIndex = parseInt(selection || '0') - 1;
-    
-    if (doctorIndex >= 0 && doctorIndex < doctors.length) {
-      const selectedDoctor = doctors[doctorIndex];
-      alert(`Patient ${patient.name} assigned to ${selectedDoctor}`);
-      refreshPatients();
-    }
+    alert(`Patient ${selectedPatientForCase.name} assigned to ${selectedDoctor}`);
+    setShowAssignDialog(false);
+    setSelectedDoctor('');
+    setSelectedPatientForCase(null);
+    refreshPatients();
   };
 
   const updatePatient = (patientId: string) => {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
-    const newName = prompt('Update patient name:', patient.name);
-    if (!newName || newName === patient.name) return;
+    setSelectedPatientForCase(patient);
+    setShowCaseDialog(true);
+  };
 
-    alert(`Patient ${patient.name} updated to ${newName}`);
+  const approveCase = () => {
+    if (!selectedPatientForCase) return;
+    
+    alert(`✅ Case APPROVED for ${selectedPatientForCase.name}\n\nStatus: Treatment Completed\nDoctor: Dr. Rajesh Khanna\nDate: ${new Date().toLocaleDateString()}`);
+    setShowCaseDialog(false);
+    setSelectedPatientForCase(null);
+    refreshPatients();
+  };
+
+  const closeCase = () => {
+    if (!selectedPatientForCase) return;
+    
+    alert(`❌ Case CLOSED for ${selectedPatientForCase.name}\n\nReason: Treatment completed/Patient discharged\nDoctor: Dr. Rajesh Khanna\nDate: ${new Date().toLocaleDateString()}`);
+    setShowCaseDialog(false);
+    setSelectedPatientForCase(null);
     refreshPatients();
   };
 
@@ -220,7 +233,7 @@ export default function PatientsPage() {
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => updatePatient(patient.id)}>
                       <Edit className="h-4 w-4 mr-1" />
-                      Update
+                      Manage Case
                     </Button>
                     {patient.status === 'PENDING' && (
                       <Button size="sm" onClick={() => assignToDoctor(patient.id)}>
@@ -250,7 +263,7 @@ export default function PatientsPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-4">
           <Card>
             <CardHeader>
               <CardTitle>Pending Patients</CardTitle>
@@ -286,7 +299,233 @@ export default function PatientsPage() {
               <p className="text-sm text-gray-600">Treatment completed</p>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Nearby Pharmacies</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <div className="font-medium text-blue-600">Apollo Pharmacy</div>
+                  <div className="text-sm text-gray-600">Near ITER Campus, Bhubaneswar</div>
+                  <div className="text-sm text-gray-600">Phone: 9876543300</div>
+                </div>
+                <div>
+                  <div className="font-medium text-green-600">MedPlus Pharmacy</div>
+                  <div className="text-sm text-gray-600">Near SUM Hospital, Kalinga Nagar</div>
+                  <div className="text-sm text-gray-600">Phone: 9876543301</div>
+                </div>
+                <div>
+                  <div className="font-medium text-orange-600">Care Pharmacy</div>
+                  <div className="text-sm text-gray-600">ITER Road, Siksha O Anusandhan</div>
+                  <div className="text-sm text-gray-600">Phone: 9876543302</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        <Dialog open={showPatientDetailsDialog} onOpenChange={setShowPatientDetailsDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Patient Details</DialogTitle>
+            </DialogHeader>
+            {selectedPatientForCase && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-medium text-blue-800 mb-2">{selectedPatientForCase.name}</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p><strong>Age:</strong> {selectedPatientForCase.age}</p>
+                      <p><strong>Phone:</strong> {selectedPatientForCase.phone}</p>
+                      <p><strong>Status:</strong> {selectedPatientForCase.status}</p>
+                    </div>
+                    <div>
+                      <p><strong>Token:</strong> {selectedPatientForCase.dataToken}</p>
+                      <p><strong>Created:</strong> {new Date(selectedPatientForCase.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 border rounded-lg p-4">
+                  <h4 className="font-medium mb-2">Problem Description</h4>
+                  <p className="text-sm text-gray-700">
+                    <strong>Symptoms:</strong> {selectedPatientForCase.symptoms.join(', ')}
+                  </p>
+                  {selectedPatientForCase.reports && selectedPatientForCase.reports.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm text-gray-700">
+                        <strong>Detailed Description:</strong> {selectedPatientForCase.reports[0].content || selectedPatientForCase.reports[0].description}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {selectedPatientForCase.reports && selectedPatientForCase.reports.some(r => r.image || r.imageData) && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium mb-3 text-green-800">Patient Images</h4>
+                    <div className="space-y-3">
+                      {selectedPatientForCase.reports.map((report, index) => (
+                        (report.image || report.imageData) && (
+                          <div key={index} className="flex items-center justify-between p-3 bg-white border rounded">
+                            <div className="flex items-center gap-3">
+                              {report.imageData && (
+                                <img 
+                                  src={report.imageData} 
+                                  alt="Patient medical image" 
+                                  className="w-16 h-16 object-cover border rounded"
+                                />
+                              )}
+                              <div>
+                                <p className="text-sm font-medium">{report.image || 'Medical Image'}</p>
+                                <p className="text-xs text-gray-500">Submitted with health report</p>
+                              </div>
+                            </div>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                if (report.imageData) {
+                                  downloadPatientImage(report.imageData, selectedPatientForCase.name);
+                                } else {
+                                  alert('Image download not available');
+                                }
+                              }}
+                            >
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => {
+                      setShowPatientDetailsDialog(false);
+                      setShowCaseDialog(true);
+                    }}
+                    className="flex-1"
+                  >
+                    Manage Case
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowPatientDetailsDialog(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Assign Doctor</DialogTitle>
+            </DialogHeader>
+            {selectedPatientForCase && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="font-medium text-blue-800">{selectedPatientForCase.name}</p>
+                  <p className="text-sm text-blue-600">Symptoms: {selectedPatientForCase.symptoms.join(', ')}</p>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Select Specialist Doctor</label>
+                  <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose doctor by specialty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Dr. Rajesh Kumar - Cardiologist">Dr. Rajesh Kumar - Cardiologist</SelectItem>
+                      <SelectItem value="Dr. Priya Sharma - Dermatologist">Dr. Priya Sharma - Dermatologist</SelectItem>
+                      <SelectItem value="Dr. Amit Singh - Orthopedic">Dr. Amit Singh - Orthopedic</SelectItem>
+                      <SelectItem value="Dr. Sunita Patel - Gynecologist">Dr. Sunita Patel - Gynecologist</SelectItem>
+                      <SelectItem value="Dr. Ravi Gupta - ENT Specialist">Dr. Ravi Gupta - ENT Specialist</SelectItem>
+                      <SelectItem value="Dr. Meera Joshi - Ophthalmologist">Dr. Meera Joshi - Ophthalmologist</SelectItem>
+                      <SelectItem value="Dr. Vikram Rao - Neurologist">Dr. Vikram Rao - Neurologist</SelectItem>
+                      <SelectItem value="Dr. Kavita Nair - General Medicine">Dr. Kavita Nair - General Medicine</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleDoctorAssignment}
+                    className="flex-1"
+                    disabled={!selectedDoctor}
+                  >
+                    Assign Doctor
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowAssignDialog(false);
+                      setSelectedDoctor('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showCaseDialog} onOpenChange={setShowCaseDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Manage Patient Case</DialogTitle>
+            </DialogHeader>
+            {selectedPatientForCase && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="font-medium text-blue-800">{selectedPatientForCase.name}</p>
+                  <p className="text-sm text-blue-600">Age: {selectedPatientForCase.age} | Phone: {selectedPatientForCase.phone}</p>
+                  <p className="text-sm text-blue-600">Symptoms: {selectedPatientForCase.symptoms.join(', ')}</p>
+                  <p className="text-sm text-blue-600">Status: {selectedPatientForCase.status}</p>
+                </div>
+                
+                <div className="text-sm text-gray-600">
+                  Choose an action for this patient case:
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={approveCase}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Approve Case
+                  </Button>
+                  <Button 
+                    onClick={closeCase}
+                    variant="destructive"
+                    className="flex-1"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Close Case
+                  </Button>
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowCaseDialog(false)}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

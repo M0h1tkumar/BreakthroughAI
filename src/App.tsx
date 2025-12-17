@@ -22,6 +22,9 @@ import NotFound from "./pages/NotFound";
 import PharmacyDashboard from "./pages/PharmacyDashboard";
 import PharmacySettings from "./pages/PharmacySettings";
 import AICouncilPage from "./pages/AICouncilPage";
+import AppointmentsPage from "./pages/AppointmentsPage";
+import EmergencyPage from "./pages/EmergencyPage";
+import PharmacyPatientPage from "./pages/PharmacyPatientPage";
 import { authService } from "./lib/auth";
 
 const queryClient = new QueryClient();
@@ -110,7 +113,15 @@ const App = () => (
           } />
           <Route path="/pharmacy" element={
             <ProtectedRoute>
-              <PharmacyDashboard />
+              {(() => {
+                const user = authService.getCurrentUser();
+                if (user?.role === 'PHARMACY') {
+                  return <PharmacyDashboard />;
+                } else {
+                  return <PharmacyPatientPage />;
+                }
+              })()
+              }
             </ProtectedRoute>
           } />
           <Route path="/queries" element={
@@ -156,6 +167,21 @@ const App = () => (
           <Route path="/ai-council" element={
             <ProtectedRoute>
               <AICouncilPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/appointments" element={
+            <ProtectedRoute>
+              <AppointmentsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/emergency" element={
+            <ProtectedRoute>
+              <EmergencyPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/pharmacy-patient" element={
+            <ProtectedRoute>
+              <PharmacyPatientPage />
             </ProtectedRoute>
           } />
           <Route path="*" element={<NotFound />} />

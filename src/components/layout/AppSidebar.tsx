@@ -10,7 +10,9 @@ import {
   Pill,
   Brain,
   LogOut,
-  TrendingUp
+  TrendingUp,
+  Calendar,
+  Activity
 } from 'lucide-react';
 import { authService } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
@@ -37,8 +39,7 @@ export function AppSidebar() {
   const menuItems = [
     { 
       icon: LayoutDashboard, 
-      label: user?.role === 'DOCTOR' ? 'Doctor Dashboard' : 
-             user?.role === 'PHARMACY' ? 'Pharmacy Dashboard' : 'Patient Dashboard', 
+      label: 'Dashboard', 
       path: '/dashboard' 
     },
     { 
@@ -49,8 +50,14 @@ export function AppSidebar() {
     },
     { 
       icon: FileText, 
-      label: 'Reports', 
+      label: 'Reports & Diagnosis', 
       path: '/reports' 
+    },
+    { 
+      icon: Pill, 
+      label: 'My Prescriptions', 
+      path: '/pharmacy-patient',
+      roles: ['PATIENT']
     },
     { 
       icon: Brain, 
@@ -63,7 +70,18 @@ export function AppSidebar() {
       label: 'Search', 
       path: '/search' 
     },
-
+    { 
+      icon: Calendar, 
+      label: 'Appointments', 
+      path: '/appointments',
+      roles: ['PATIENT']
+    },
+    { 
+      icon: Activity, 
+      label: 'Emergency', 
+      path: '/emergency',
+      roles: ['DOCTOR']
+    },
     { 
       icon: Settings, 
       label: 'Settings', 

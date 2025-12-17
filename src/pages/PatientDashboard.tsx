@@ -165,10 +165,25 @@ export default function PatientDashboard() {
                             recognition.onresult = async (event: any) => {
                               const transcript = event.results[0][0].transcript;
                               
+                              // Auto-assign specialist based on symptoms
+                              const symptoms = transcript.toLowerCase();
+                              let specialist = 'General Medicine';
+                              
+                              if (symptoms.includes('heart') || symptoms.includes('chest') || symptoms.includes('cardiac')) {
+                                specialist = 'Cardiology';
+                              } else if (symptoms.includes('skin') || symptoms.includes('rash') || symptoms.includes('dermat')) {
+                                specialist = 'Dermatology';
+                              } else if (symptoms.includes('bone') || symptoms.includes('joint') || symptoms.includes('orthop')) {
+                                specialist = 'Orthopedics';
+                              } else if (symptoms.includes('eye') || symptoms.includes('vision') || symptoms.includes('ophthal')) {
+                                specialist = 'Ophthalmology';
+                              } else if (symptoms.includes('ear') || symptoms.includes('nose') || symptoms.includes('throat') || symptoms.includes('ent')) {
+                                specialist = 'ENT';
+                              }
+                              
                               // Simple translation to English (mock translation)
                               let englishText = transcript;
                               if (userLang.includes('hi')) {
-                                // Mock Hindi to English translation
                                 englishText = `[Hindi] ${transcript} (Translated: chest pain and breathing difficulty)`;
                               } else if (userLang.includes('es')) {
                                 englishText = `[Spanish] ${transcript} (Translated: ${transcript})`;
@@ -235,6 +250,22 @@ export default function PatientDashboard() {
                         // Store in localStorage for doctor/AI council access
                         const existingReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
                         existingReports.push(healthReport);
+                        // Auto-assign specialist based on symptoms
+                        const symptoms = healthInput.toLowerCase();
+                        let specialist = 'General Medicine';
+                        
+                        if (symptoms.includes('heart') || symptoms.includes('chest') || symptoms.includes('cardiac')) {
+                          specialist = 'Cardiology';
+                        } else if (symptoms.includes('skin') || symptoms.includes('rash') || symptoms.includes('dermat')) {
+                          specialist = 'Dermatology';
+                        } else if (symptoms.includes('bone') || symptoms.includes('joint') || symptoms.includes('orthop')) {
+                          specialist = 'Orthopedics';
+                        } else if (symptoms.includes('eye') || symptoms.includes('vision') || symptoms.includes('ophthal')) {
+                          specialist = 'Ophthalmology';
+                        } else if (symptoms.includes('ear') || symptoms.includes('nose') || symptoms.includes('throat') || symptoms.includes('ent')) {
+                          specialist = 'ENT';
+                        }
+                        
                         localStorage.setItem('healthReports', JSON.stringify(existingReports));
                         localStorage.setItem('lastAssignedSpecialist', specialist);
                         
@@ -246,6 +277,32 @@ export default function PatientDashboard() {
                           sentToAI: new Date().toISOString()
                         });
                         localStorage.setItem('aiCouncilReports', JSON.stringify(aiCouncilReports));
+                        
+                        // Store image as blob URL for real-time display
+                        if (selectedImage) {
+                          const reader = new FileReader();
+                          reader.onload = (e) => {
+                            healthReport.imageData = e.target.result;
+                            // Update localStorage with image data
+                            const updatedReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
+                            const reportIndex = updatedReports.findIndex(r => r.id === healthReport.id);
+                            if (reportIndex !== -1) {
+                              updatedReports[reportIndex] = healthReport;
+                              localStorage.setItem('healthReports', JSON.stringify(updatedReports));
+                            }
+                            
+                            // Trigger real-time update to doctor dashboard
+                            const event = new CustomEvent('patientReportUpdated');
+                            window.dispatchEvent(event);
+                          };
+                          reader.readAsDataURL(selectedImage);
+                        } else {
+                          // Trigger update even without image
+                          setTimeout(() => {
+                            const event = new CustomEvent('patientReportUpdated');
+                            window.dispatchEvent(event);
+                          }, 100);
+                        }
                         
                         // Store healthReport in component state for dialog access
                         window.currentHealthReport = healthReport;
@@ -387,6 +444,107 @@ export default function PatientDashboard() {
                   <p className="text-xs text-blue-700 font-medium">
                     🔐 Your data is tokenized with ID: {patient.dataToken}
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Nearby Healthcare Facilities</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <iframe
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3742.1234567890!2d85.8245!3d20.3496!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a1909d2d5170aa5%3A0x1234567890abcdef!2sITER%20Campus%2C%20Bhubaneswar!5e0!3m2!1sen!2sin!4v1234567890123!5m2!1sen!2sin"
+                    width="100%"
+                    height="250"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  ></iframe>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-medium text-red-600 mb-2">🏥 Nearby Hospitals</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center p-2 border rounded bg-red-50">
+                          <div>
+                            <div className="font-medium text-red-700">SUM Hospital</div>
+                            <div className="text-xs text-gray-600">Kalinga Nagar, Bhubaneswar</div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => window.open('https://maps.google.com/?q=SUM+Hospital+Kalinga+Nagar+Bhubaneswar', '_blank')}
+                          >
+                            Directions
+                          </Button>
+                        </div>
+                        
+                        <div className="flex justify-between items-center p-2 border rounded bg-red-50">
+                          <div>
+                            <div className="font-medium text-red-700">AIIMS Bhubaneswar</div>
+                            <div className="text-xs text-gray-600">Sijua, Bhubaneswar</div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => window.open('https://maps.google.com/?q=AIIMS+Bhubaneswar+Sijua', '_blank')}
+                          >
+                            Directions
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-medium text-blue-600 mb-2">💊 Nearby Pharmacies</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center p-2 border rounded bg-blue-50">
+                          <div>
+                            <div className="font-medium text-blue-700">Apollo Pharmacy</div>
+                            <div className="text-xs text-gray-600">Near ITER Campus</div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => window.open('https://maps.google.com/?q=Apollo+Pharmacy+ITER+Bhubaneswar', '_blank')}
+                          >
+                            Directions
+                          </Button>
+                        </div>
+                        
+                        <div className="flex justify-between items-center p-2 border rounded bg-blue-50">
+                          <div>
+                            <div className="font-medium text-blue-700">MedPlus Pharmacy</div>
+                            <div className="text-xs text-gray-600">SUM Hospital Area</div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => window.open('https://maps.google.com/?q=MedPlus+Pharmacy+SUM+Hospital+Bhubaneswar', '_blank')}
+                          >
+                            Directions
+                          </Button>
+                        </div>
+                        
+                        <div className="flex justify-between items-center p-2 border rounded bg-blue-50">
+                          <div>
+                            <div className="font-medium text-blue-700">Care Pharmacy</div>
+                            <div className="text-xs text-gray-600">ITER Road</div>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => window.open('https://maps.google.com/?q=Care+Pharmacy+ITER+Road+Bhubaneswar', '_blank')}
+                          >
+                            Directions
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -5,11 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { FileText, Search, Download, Eye, Calendar, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function ReportsPage() {
   const [reports, setReports] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredReports, setFilteredReports] = useState([]);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [selectedReport, setSelectedReport] = useState(null);
 
   useEffect(() => {
     // Load reports from localStorage and mock data
@@ -72,7 +75,8 @@ export default function ReportsPage() {
   const viewReport = (reportId: string) => {
     const report = reports.find(r => r.id === reportId);
     if (report) {
-      alert(`MEDICAL REPORT\n\nReport ID: ${report.id}\nPatient: ${report.patientName}\nDoctor: ${report.doctorName}\nDate: ${report.date}\nStatus: ${report.status}\n\n--- CONTENT ---\n${report.content}\n\n${report.image ? `Image: ${report.image}\n\n` : ''}--- COMPLIANCE ---\nThis report contains AI-generated insights. Final medical interpretation and decisions must be made by a licensed doctor.`);
+      setSelectedReport(report);
+      setShowReportDialog(true);
     }
   };
 
@@ -196,7 +200,77 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-
+        <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Medical Report Details</DialogTitle>
+            </DialogHeader>
+            {selectedReport && (
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p><strong>Report ID:</strong> {selectedReport.id}</p>
+                      <p><strong>Patient:</strong> {selectedReport.patientName}</p>
+                      <p><strong>Doctor:</strong> {selectedReport.doctorName}</p>
+                    </div>
+                    <div>
+                      <p><strong>Date:</strong> {selectedReport.date}</p>
+                      <p><strong>Status:</strong> 
+                        <Badge className="ml-2" variant={
+                          selectedReport.status === 'DOCTOR_APPROVED' ? 'default' :
+                          selectedReport.status === 'SUBMITTED' ? 'secondary' : 'outline'
+                        }>
+                          {selectedReport.status.replace('_', ' ')}
+                        </Badge>
+                      </p>
+                      {selectedReport.approvedAt && (
+                        <p><strong>Approved:</strong> {new Date(selectedReport.approvedAt).toLocaleString()}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 border rounded-lg p-4">
+                  <h4 className="font-medium mb-3">Report Content</h4>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {selectedReport.content}
+                  </div>
+                </div>
+                
+                {selectedReport.image && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-medium mb-2 text-green-800">Attached Image</h4>
+                    <p className="text-sm text-green-700">📷 {selectedReport.image}</p>
+                  </div>
+                )}
+                
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <p className="text-xs text-orange-800 font-medium">⚠️ MEDICAL DISCLAIMER</p>
+                  <p className="text-xs text-orange-700 mt-1">
+                    This report contains AI-generated insights. Final medical interpretation and decisions must be made by a licensed doctor.
+                  </p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => downloadReport(selectedReport.id)}
+                    className="flex-1"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Report
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowReportDialog(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

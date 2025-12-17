@@ -14,50 +14,74 @@ export default function DoctorDashboard() {
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [aiReport, setAiReport] = useState('');
+  const [isEditingAI, setIsEditingAI] = useState(false);
   const [showPrescription, setShowPrescription] = useState(false);
   const [prescriptionText, setPrescriptionText] = useState('');
   const [selectedMedicine, setSelectedMedicine] = useState('');
   const [dosage, setDosage] = useState('');
   const [duration, setDuration] = useState('');
+  const [prescriptionImage, setPrescriptionImage] = useState(null);
+  const [doctorSuggestion, setDoctorSuggestion] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [emergencies, setEmergencies] = useState([]);
 
   useEffect(() => {
-    // Load patients with priority
-    const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
-    const mockPatients = [
-      { id: '1', name: 'Pree Om', age: 28, symptoms: ['chest pain', 'shortness of breath'], phone: '+91-9853224443', priority: 'HIGH', dataToken: 'TOKEN123456' },
-      { id: '2', name: 'Priya Sharma', age: 32, symptoms: ['headache'], phone: '098-765-4321', priority: 'MEDIUM' }
-    ];
+    const loadPatientData = () => {
+      // Load patients with priority
+      const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
+      const mockPatients = [
+        { id: '1', name: 'Pree Om', age: 28, symptoms: ['chest pain', 'shortness of breath'], phone: '+91-9853224443', priority: 'HIGH', dataToken: 'TOKEN123456' },
+        { id: '2', name: 'Priya Sharma', age: 32, symptoms: ['headache'], phone: '098-765-4321', priority: 'MEDIUM' }
+      ];
+      
+      // Add health reports as patients with real-time updates
+      const reportPatients = healthReports.map(report => ({
+        id: report.patientId,
+        name: report.patientName,
+        symptoms: [report.description],
+        phone: '+91-9853224443',
+        priority: 'HIGH',
+        dataToken: report.patientToken,
+        healthReport: report,
+        image: report.image,
+        imageData: report.imageData,
+        lastUpdated: report.timestamp
+      }));
+      
+      const allPatients = [...mockPatients, ...reportPatients]
+        .sort((a, b) => {
+          const priorityOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+          return priorityOrder[b.priority] - priorityOrder[a.priority];
+        });
+      
+      setPatients(allPatients);
+      
+      // Load appointments from localStorage
+      const savedAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+      setAppointments(savedAppointments);
+      
+      // Load emergencies from localStorage
+      const savedEmergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+      setEmergencies(savedEmergencies);
+    };
+
+    // Initial load
+    loadPatientData();
+
+    // Set up real-time polling for patient updates
+    const interval = setInterval(loadPatientData, 1000); // Check every 1 second for real-time updates
+
+    // Listen for patient report events
+    const handlePatientReportUpdate = () => {
+      loadPatientData();
+    };
     
-    // Add health reports as patients
-    const reportPatients = healthReports.map(report => ({
-      id: report.patientId,
-      name: report.patientName,
-      symptoms: [report.description],
-      phone: '+91-9853224443',
-      priority: 'HIGH',
-      dataToken: report.patientToken,
-      healthReport: report,
-      image: report.image,
-      imageData: report.imageData
-    }));
-    
-    const allPatients = [...mockPatients, ...reportPatients]
-      .sort((a, b) => {
-        const priorityOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 };
-        return priorityOrder[b.priority] - priorityOrder[a.priority];
-      });
-    
-    setPatients(allPatients);
-    
-    // Load appointments from localStorage
-    const savedAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
-    setAppointments(savedAppointments);
-    
-    // Load emergencies from localStorage
-    const savedEmergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
-    setEmergencies(savedEmergencies);
+    window.addEventListener('patientReportUpdated', handlePatientReportUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('patientReportUpdated', handlePatientReportUpdate);
+    };
   }, []);
 
   const initiateVideoCall = (patient) => {
@@ -129,8 +153,10 @@ through proper clinical evaluation and judgment.`;
       dosage: dosage,
       duration: duration,
       notes: prescriptionText,
+      doctorSuggestion: doctorSuggestion,
+      medicineImage: prescriptionImage,
       date: new Date().toISOString().split('T')[0],
-      status: 'SENT'
+      status: 'ACTIVE'
     };
     
     // Save to localStorage for pharmacy
@@ -138,22 +164,31 @@ through proper clinical evaluation and judgment.`;
     prescriptions.push(prescription);
     localStorage.setItem('prescriptions', JSON.stringify(prescriptions));
     
-    alert(`Prescription sent successfully!
+    // Real-time notification
+    alert(`✅ PRESCRIPTION SENT IN REAL-TIME!
 
 Patient: ${selectedPatient.name}
 Medicine: ${selectedMedicine}
 Dosage: ${dosage}
 Duration: ${duration}
-Notes: ${prescriptionText}
 
-✅ Sent to Pharmacy
-✅ Patient notification sent`);
+📱 Instantly delivered to patient
+🏥 Instantly sent to pharmacy
+⚡ Real-time synchronization complete`);
+    
+    // Trigger immediate refresh of patient data
+    setTimeout(() => {
+      const event = new CustomEvent('prescriptionSent');
+      window.dispatchEvent(event);
+    }, 100);
     
     setShowPrescription(false);
     setPrescriptionText('');
     setSelectedMedicine('');
     setDosage('');
     setDuration('');
+    setPrescriptionImage(null);
+    setDoctorSuggestion('');
   };
 
   return (
@@ -410,12 +445,40 @@ Notes: ${prescriptionText}
             </CardHeader>
             <CardContent>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <pre className="text-sm whitespace-pre-wrap font-mono">{aiReport}</pre>
+                {isEditingAI ? (
+                  <Textarea
+                    value={aiReport}
+                    onChange={(e) => setAiReport(e.target.value)}
+                    rows={20}
+                    className="font-mono text-sm"
+                  />
+                ) : (
+                  <pre className="text-sm whitespace-pre-wrap font-mono">{aiReport}</pre>
+                )}
               </div>
               <div className="flex gap-2">
-                <Button onClick={() => alert('AI Report validated and approved by doctor')}>
-                  Validate & Approve
-                </Button>
+                {isEditingAI ? (
+                  <>
+                    <Button onClick={() => {
+                      setIsEditingAI(false);
+                      alert('AI Report edited and saved by doctor');
+                    }}>
+                      Save Changes
+                    </Button>
+                    <Button variant="outline" onClick={() => setIsEditingAI(false)}>
+                      Cancel Edit
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={() => setIsEditingAI(true)}>
+                      Edit Report
+                    </Button>
+                    <Button onClick={() => alert('AI Report validated and approved by doctor')}>
+                      Validate & Approve
+                    </Button>
+                  </>
+                )}
                 <Button variant="outline" onClick={() => setAiReport('')}>
                   Close Report
                 </Button>
@@ -494,8 +557,43 @@ Notes: ${prescriptionText}
                 placeholder="Additional notes and instructions..."
                 value={prescriptionText}
                 onChange={(e) => setPrescriptionText(e.target.value)}
-                rows={3}
+                rows={2}
               />
+              
+              <Textarea 
+                placeholder="Doctor's suggestion and medical advice for patient..."
+                value={doctorSuggestion}
+                onChange={(e) => setDoctorSuggestion(e.target.value)}
+                rows={2}
+              />
+              
+              <div>
+                <label className="text-sm font-medium mb-2 block">Upload Medicine Image</label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        setPrescriptionImage(event.target.result);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="text-sm"
+                />
+                {prescriptionImage && (
+                  <div className="mt-2">
+                    <img 
+                      src={prescriptionImage} 
+                      alt="Medicine preview" 
+                      className="w-20 h-20 object-cover border rounded"
+                    />
+                  </div>
+                )}
+              </div>
               
               <div className="flex gap-2">
                 <Button onClick={sendPrescription} className="flex-1">
