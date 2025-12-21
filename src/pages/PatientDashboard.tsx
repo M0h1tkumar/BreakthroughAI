@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { User, Shield, Clock, FileText, Mic, MicOff, Camera, Send, Calendar } from 'lucide-react';
+import { MedicalAPIs } from '../lib/medicalAPIs';
+import { langchainMedical } from '../lib/langchainMedical';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -250,21 +252,26 @@ export default function PatientDashboard() {
                         // Store in localStorage for doctor/AI council access
                         const existingReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
                         existingReports.push(healthReport);
-                        // Auto-assign specialist based on symptoms
-                        const symptoms = healthInput.toLowerCase();
+                        // Basic specialist routing
                         let specialist = 'General Medicine';
+                        const symptoms = healthInput.toLowerCase();
+                        if (symptoms.includes('heart') || symptoms.includes('chest')) specialist = 'Cardiology';
+                        else if (symptoms.includes('skin') || symptoms.includes('rash')) specialist = 'Dermatology';
+                        else if (symptoms.includes('bone') || symptoms.includes('joint')) specialist = 'Orthopedics';
+                        else if (symptoms.includes('stomach') || symptoms.includes('digest')) specialist = 'Gastroenterology';
                         
-                        if (symptoms.includes('heart') || symptoms.includes('chest') || symptoms.includes('cardiac')) {
-                          specialist = 'Cardiology';
-                        } else if (symptoms.includes('skin') || symptoms.includes('rash') || symptoms.includes('dermat')) {
-                          specialist = 'Dermatology';
-                        } else if (symptoms.includes('bone') || symptoms.includes('joint') || symptoms.includes('orthop')) {
-                          specialist = 'Orthopedics';
-                        } else if (symptoms.includes('eye') || symptoms.includes('vision') || symptoms.includes('ophthal')) {
-                          specialist = 'Ophthalmology';
-                        } else if (symptoms.includes('ear') || symptoms.includes('nose') || symptoms.includes('throat') || symptoms.includes('ent')) {
-                          specialist = 'ENT';
-                        }
+                        // LangChain routing in background
+                        langchainMedical.routeToSpecialist(healthInput, healthInput)
+                          .then(routing => {
+                            let enhancedSpecialist = specialist;
+                            if (routing.includes('Cardiology')) enhancedSpecialist = 'Cardiology';
+                            else if (routing.includes('Dermatology')) enhancedSpecialist = 'Dermatology';
+                            else if (routing.includes('Neurology')) enhancedSpecialist = 'Neurology';
+                            else if (routing.includes('Orthopedics')) enhancedSpecialist = 'Orthopedics';
+                            else if (routing.includes('Gastroenterology')) enhancedSpecialist = 'Gastroenterology';
+                            localStorage.setItem('lastAssignedSpecialist', enhancedSpecialist);
+                          })
+                          .catch(error => console.error('LangChain routing error:', error));
                         
                         localStorage.setItem('healthReports', JSON.stringify(existingReports));
                         localStorage.setItem('lastAssignedSpecialist', specialist);

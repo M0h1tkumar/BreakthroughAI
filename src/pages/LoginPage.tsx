@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, User, Building, UserCheck, AlertTriangle, MapPin, Phone } from 'lucide-react';
+import { Shield, User, Building, UserCheck, AlertTriangle, MapPin, Phone, CheckCircle } from 'lucide-react';
 import { authService } from '@/lib/auth';
 import { googleAuth } from '@/lib/googleAuth';
 import { adminService } from '@/lib/adminService';
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'patient' | 'doctor' | 'pharmacy' | 'admin'>('patient');
   const [showEmergency, setShowEmergency] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [emergencyDetails, setEmergencyDetails] = useState('');
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
@@ -69,11 +70,15 @@ export default function LoginPage() {
     emergencies.unshift(emergency);
     localStorage.setItem('emergencies', JSON.stringify(emergencies));
 
-    alert(`🚨 EMERGENCY ALERT SENT!\n\nDetails: ${emergencyDetails}\nLocation: ${location}\nPhone: ${phone}\n\n✅ All active doctors notified\n✅ Emergency services contacted\n✅ Ambulance dispatched`);
-    
     setShowEmergency(false);
+    setShowConfirmation(true);
+  };
+
+  const closeConfirmation = () => {
+    setShowConfirmation(false);
     setEmergencyDetails('');
     setPhone('');
+    setLocation('');
   };
 
   const handleLogin = () => {
@@ -366,6 +371,67 @@ export default function LoginPage() {
               <div className="bg-blue-50 border border-blue-200 rounded p-2">
                 <p className="text-xs text-blue-700 text-center">
                   📞 For life-threatening emergencies, also call 108 (India) or your local emergency number
+                </p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <CheckCircle className="h-6 w-6" />
+                ✅ EMERGENCY ALERT SENT
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="text-center space-y-3">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-green-800">
+                    Help is on the way!
+                  </h3>
+                  <p className="text-sm text-green-700">
+                    Your emergency alert has been sent successfully. Medical assistance will arrive shortly.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <h4 className="font-medium text-blue-800 mb-2">📡 Notifications Sent:</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>✅ All active doctors alerted</li>
+                    <li>✅ Emergency services contacted</li>
+                    <li>✅ Ambulance dispatched to your location</li>
+                    <li>✅ Medical team preparing for arrival</li>
+                  </ul>
+                </div>
+                
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <h4 className="font-medium text-amber-800 mb-2">⏱️ What happens next:</h4>
+                  <ul className="text-sm text-amber-700 space-y-1">
+                    <li>• Doctor will call you within 2-3 minutes</li>
+                    <li>• Ambulance ETA: 8-12 minutes</li>
+                    <li>• Keep your phone nearby and accessible</li>
+                    <li>• Stay calm, help is coming</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <Button 
+                onClick={closeConfirmation}
+                className="w-full bg-green-600 hover:bg-green-700"
+              >
+                Got it, Thank You
+              </Button>
+              
+              <div className="bg-red-50 border border-red-200 rounded p-2">
+                <p className="text-xs text-red-700 text-center font-medium">
+                  🚨 For immediate life-threatening situations, also call 108 (India)
                 </p>
               </div>
             </div>

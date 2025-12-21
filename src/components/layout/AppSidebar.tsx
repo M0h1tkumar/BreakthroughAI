@@ -74,7 +74,13 @@ export function AppSidebar() {
       icon: Calendar, 
       label: 'Appointments', 
       path: '/appointments',
-      roles: ['PATIENT']
+      roles: ['DOCTOR']
+    },
+    { 
+      icon: Activity, 
+      label: 'Lab Results', 
+      path: '/lab-results',
+      roles: ['DOCTOR', 'PATIENT']
     },
     { 
       icon: Activity, 

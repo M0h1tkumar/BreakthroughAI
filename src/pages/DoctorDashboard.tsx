@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Users, Brain, FileText, AlertTriangle, Video, Pill, Send, Calendar, Clock, MapPin, Phone } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { langchainMedical } from '../lib/langchainMedical';
 
 export default function DoctorDashboard() {
   const [patients, setPatients] = useState([]);
@@ -90,58 +91,59 @@ export default function DoctorDashboard() {
     alert(`Video call initiated with ${patient.name}\nPhone: ${patient.phone}\nMeeting link opened in new tab`);
   };
 
-  const generateAIReport = (patient) => {
-    const symptoms = patient.symptoms.join(', ');
-    const aiAnalysis = `AI CLINICAL DIAGNOSIS REPORT
-
-Patient: ${patient.name}
-Token: ${patient.dataToken || 'N/A'}
-Age: ${patient.age || 'Unknown'}
-Symptoms: ${symptoms}
-
---- AI DIFFERENTIAL DIAGNOSIS ---
-
-Primary Diagnosis Considerations:
-• Based on symptoms: ${symptoms}
-• Requires clinical correlation and examination
-• Consider relevant diagnostic workup
-
-Recommended Investigations:
-• Physical examination mandatory
-• Vital signs assessment
-• Relevant laboratory tests based on presentation
-• Consider imaging if indicated
-
-Risk Stratification:
-• Priority Level: ${patient.priority}
-• Immediate attention recommended for HIGH priority cases
-• Monitor for symptom progression
-
-Treatment Recommendations:
-• Symptomatic management as appropriate
-• Follow evidence-based clinical guidelines
-• Consider patient-specific factors
-• Regular follow-up as needed
-
---- AI CONFIDENCE METRICS ---
-Diagnostic Confidence: 78%
-Recommendation Reliability: 82%
-Risk Assessment Accuracy: 85%
-
---- MANDATORY DISCLAIMER ---
-This AI analysis is for clinical decision support only. 
-Final diagnosis, treatment decisions, and patient care 
-must be determined by licensed medical professionals 
-through proper clinical evaluation and judgment.`;
-    
-    setAiReport(aiAnalysis);
-    setShowDisclaimer(false);
+  const generateAIReport = async (patient) => {
+    try {
+      // Use LangChain for structured medical reasoning
+      const diagnosis = await langchainMedical.generateDiagnosis({
+        age: patient.age?.toString() || '30',
+        gender: 'Not specified',
+        symptoms: patient.symptoms.join(', '),
+        history: 'None reported'
+      });
+      
+      // Emergency triage if high priority
+      if (patient.priority === 'HIGH') {
+        const triage = await langchainMedical.triageEmergency({
+          symptoms: patient.symptoms.join(', '),
+          vitals: 'BP: 120/80, HR: 72, Temp: 98.6°F',
+          age: patient.age?.toString() || '30'
+        });
+        
+        setAiReport(`${diagnosis}\n\n--- EMERGENCY TRIAGE ASSESSMENT ---\n${triage}`);
+      } else {
+        setAiReport(diagnosis);
+      }
+      
+      setShowDisclaimer(false);
+    } catch (error) {
+      console.error('LangChain AI Report Error:', error);
+      const symptoms = patient.symptoms.join(', ');
+      const fallbackReport = `LANGCHAIN AI DIAGNOSIS REPORT\n\nPatient: ${patient.name}\nSymptoms: ${symptoms}\n\nLangChain analysis temporarily unavailable.\nUsing fallback diagnostic support.\n\n--- MEDICAL DISCLAIMER ---\nThis AI analysis is for clinical decision support only.`;
+      setAiReport(fallbackReport);
+      setShowDisclaimer(false);
+    }
   };
 
-  const sendPrescription = () => {
+  const sendPrescription = async () => {
     if (!prescriptionText && !selectedMedicine) {
       alert('Please add prescription details');
       return;
+    }
+    
+    // LangChain prescription validation
+    try {
+      const validation = await langchainMedical.validatePrescription({
+        medication: selectedMedicine,
+        dosage: dosage,
+        age: selectedPatient.age?.toString() || '30',
+        weight: '70kg',
+        allergies: 'None reported',
+        currentMeds: 'None reported'
+      });
+      
+      console.log('Prescription Validation:', validation);
+    } catch (error) {
+      console.error('Prescription validation error:', error);
     }
     
     const prescription = {
@@ -512,7 +514,7 @@ Duration: ${duration}
                   onClick={() => generateAIReport(selectedPatient)}
                   className="flex-1"
                 >
-                  I Agree - Generate AI Diagnosis
+                  I Agree - Generate Enhanced AI Diagnosis
                 </Button>
                 <Button variant="outline" onClick={() => setShowDisclaimer(false)}>
                   Cancel

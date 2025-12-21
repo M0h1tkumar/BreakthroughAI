@@ -25,6 +25,7 @@ import AICouncilPage from "./pages/AICouncilPage";
 import AppointmentsPage from "./pages/AppointmentsPage";
 import EmergencyPage from "./pages/EmergencyPage";
 import PharmacyPatientPage from "./pages/PharmacyPatientPage";
+import LabResultsPage from "./pages/LabResultsPage";
 import { authService } from "./lib/auth";
 
 const queryClient = new QueryClient();
@@ -182,6 +183,11 @@ const App = () => (
           <Route path="/pharmacy-patient" element={
             <ProtectedRoute>
               <PharmacyPatientPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/lab-results" element={
+            <ProtectedRoute>
+              <LabResultsPage />
             </ProtectedRoute>
           } />
           <Route path="*" element={<NotFound />} />
