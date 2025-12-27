@@ -140,9 +140,7 @@ class SecureDatabase {
       address: '123 Main Street, Delhi',
       phone: '9876543300',
       email: 'apollo@pharmacy.com',
-      medicines: this.medicines.slice(0, 2000).map(m => m.id),
-      totalPatients: 1250,
-      activeStaff: 45
+      medicines: this.medicines.slice(0, 2000).map(m => m.id)
     },
     {
       id: 'ph2',
@@ -150,9 +148,7 @@ class SecureDatabase {
       address: '456 Health Avenue, Mumbai',
       phone: '9876543301',
       email: 'medplus@pharmacy.com',
-      medicines: this.medicines.slice(1000, 3500).map(m => m.id),
-      totalPatients: 980,
-      activeStaff: 38
+      medicines: this.medicines.slice(1000, 3500).map(m => m.id)
     },
     {
       id: 'ph3',
@@ -160,9 +156,7 @@ class SecureDatabase {
       address: '789 Care Road, Bangalore',
       phone: '9876543302',
       email: 'wellness@pharmacy.com',
-      medicines: this.medicines.slice(2000).map(m => m.id),
-      totalPatients: 750,
-      activeStaff: 32
+      medicines: this.medicines.slice(2000).map(m => m.id)
     }
   ];
 
@@ -641,11 +635,6 @@ class SecureDatabase {
         if (!this.lockedReportIds.includes(reportId)) {
           this.lockedReportIds.push(reportId);
           localStorage.setItem('lockedReports', JSON.stringify(this.lockedReportIds));
-          
-          // Also save to IndexedDB for better persistence
-          import('./browserDatabase').then(({ browserDB }) => {
-            browserDB.saveReport(this.reports[index]).catch(console.error);
-          });
           
           // Force immediate persistence
           sessionStorage.setItem(`locked_${reportId}`, 'true');

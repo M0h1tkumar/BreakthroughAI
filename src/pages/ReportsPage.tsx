@@ -4,8 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileText, Search, Download, Eye, Calendar, Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { dataService } from '@/lib/dataService';
 
 export default function ReportsPage() {
   const [reports, setReports] = useState([]);
@@ -13,9 +16,21 @@ export default function ReportsPage() {
   const [filteredReports, setFilteredReports] = useState([]);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newReport, setNewReport] = useState({
+    reportId: '',
+    patientName: '',
+    date: '',
+    status: 'DRAFT',
+    doctor: '',
+    approvedDate: '',
+    reportContent: '',
+    medicalDisclaimer: 'This report contains AI-generated insights. Final medical interpretation and decisions must be made by a licensed doctor.'
+  });
 
   useEffect(() => {
     // Load reports from localStorage and mock data
+    const savedReports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
     const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
     const mockReports = [
       {
@@ -53,7 +68,7 @@ export default function ReportsPage() {
       image: hr.image
     }));
 
-    const allReports = [...mockReports, ...convertedHealthReports];
+    const allReports = [...savedReports, ...mockReports, ...convertedHealthReports];
     setReports(allReports);
     setFilteredReports(allReports);
   }, []);
@@ -70,6 +85,68 @@ export default function ReportsPage() {
     } else {
       setFilteredReports(reports);
     }
+  };
+
+  const createNewReport = () => {
+    if (!newReport.reportId || !newReport.patientName || !newReport.date || !newReport.doctor || !newReport.reportContent) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    // Check if patient exists by matching report ID or patient name
+    const patients = dataService.getPatients();
+    const matchingPatient = patients.find(p => 
+      p.id === newReport.reportId || 
+      p.name.toLowerCase() === newReport.patientName.toLowerCase()
+    );
+
+    if (!matchingPatient) {
+      alert(`❌ ERROR: No patient found matching Report ID "${newReport.reportId}" or Patient Name "${newReport.patientName}".\n\nPlease verify the patient exists in the system first.`);
+      return;
+    }
+
+    const report = {
+      id: newReport.reportId,
+      patientId: matchingPatient.id,
+      patientName: newReport.patientName,
+      doctorName: newReport.doctor,
+      content: newReport.reportContent,
+      status: newReport.status,
+      date: newReport.date,
+      approvedAt: newReport.approvedDate ? new Date(newReport.approvedDate).toISOString() : null,
+      medicalDisclaimer: newReport.medicalDisclaimer,
+      createdAt: new Date().toISOString()
+    };
+
+    // Add report to patient's records
+    const updatedPatient = {
+      ...matchingPatient,
+      reports: [...(matchingPatient.reports || []), report]
+    };
+    dataService.updatePatient(matchingPatient.id, updatedPatient);
+
+    const updatedReports = [report, ...reports];
+    setReports(updatedReports);
+    setFilteredReports(updatedReports);
+    
+    // Save to localStorage for persistence
+    const existingReports = JSON.parse(localStorage.getItem('medicalReports') || '[]');
+    existingReports.unshift(report);
+    localStorage.setItem('medicalReports', JSON.stringify(existingReports));
+
+    alert(`✅ REPORT CREATED & LINKED\n\nReport ID: ${report.id}\nPatient: ${report.patientName}\nStatus: ${report.status}\nLinked to Patient ID: ${matchingPatient.id}`);
+    
+    setShowCreateDialog(false);
+    setNewReport({
+      reportId: '',
+      patientName: '',
+      date: '',
+      status: 'DRAFT',
+      doctor: '',
+      approvedDate: '',
+      reportContent: '',
+      medicalDisclaimer: 'This report contains AI-generated insights. Final medical interpretation and decisions must be made by a licensed doctor.'
+    });
   };
 
   const viewReport = (reportId: string) => {
@@ -103,7 +180,7 @@ export default function ReportsPage() {
             <h1 className="text-2xl font-bold">Medical Reports</h1>
             <p className="text-muted-foreground">View and manage all patient reports</p>
           </div>
-          <Button onClick={() => alert('Create new report functionality')}>
+          <Button onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create New Report
           </Button>
@@ -199,6 +276,112 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create New Medical Report</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Report ID *</label>
+                  <Input 
+                    value={newReport.reportId}
+                    onChange={(e) => setNewReport({...newReport, reportId: e.target.value})}
+                    placeholder="RPT001"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Patient Name *</label>
+                  <Input 
+                    value={newReport.patientName}
+                    onChange={(e) => setNewReport({...newReport, patientName: e.target.value})}
+                    placeholder="Patient full name"
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Date *</label>
+                  <Input 
+                    type="date"
+                    value={newReport.date}
+                    onChange={(e) => setNewReport({...newReport, date: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Status</label>
+                  <Select value={newReport.status} onValueChange={(value) => setNewReport({...newReport, status: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DRAFT">Draft</SelectItem>
+                      <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                      <SelectItem value="DOCTOR_APPROVED">Doctor Approved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Doctor *</label>
+                  <Select value={newReport.doctor} onValueChange={(value) => setNewReport({...newReport, doctor: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Dr. Rajesh Kumar - Cardiologist">Dr. Rajesh Kumar - Cardiologist</SelectItem>
+                      <SelectItem value="Dr. Priya Sharma - Dermatologist">Dr. Priya Sharma - Dermatologist</SelectItem>
+                      <SelectItem value="Dr. Amit Singh - Orthopedic">Dr. Amit Singh - Orthopedic</SelectItem>
+                      <SelectItem value="Dr. Sunita Patel - Gynecologist">Dr. Sunita Patel - Gynecologist</SelectItem>
+                      <SelectItem value="Dr. Ravi Gupta - ENT Specialist">Dr. Ravi Gupta - ENT Specialist</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Approved Date</label>
+                  <Input 
+                    type="date"
+                    value={newReport.approvedDate}
+                    onChange={(e) => setNewReport({...newReport, approvedDate: e.target.value})}
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium mb-2 block">Report Content *</label>
+                <Textarea 
+                  value={newReport.reportContent}
+                  onChange={(e) => setNewReport({...newReport, reportContent: e.target.value})}
+                  placeholder="Enter detailed medical report content..."
+                  rows={6}
+                />
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium mb-2 block">Medical Disclaimer</label>
+                <Textarea 
+                  value={newReport.medicalDisclaimer}
+                  onChange={(e) => setNewReport({...newReport, medicalDisclaimer: e.target.value})}
+                  rows={3}
+                />
+              </div>
+              
+              <div className="flex gap-2">
+                <Button onClick={createNewReport} className="flex-1">
+                  Create Report
+                </Button>
+                <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
           <DialogContent className="max-w-2xl">

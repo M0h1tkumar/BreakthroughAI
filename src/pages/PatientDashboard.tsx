@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { User, Shield, Clock, FileText, Mic, MicOff, Camera, Send, Calendar } from 'lucide-react';
-import { MedicalAPIs } from '../lib/medicalAPIs';
-import { langchainMedical } from '../lib/langchainMedical';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { dataService } from '@/lib/dataService';
 
 export default function PatientDashboard() {
   const [patient, setPatient] = useState(null);
@@ -21,11 +20,14 @@ export default function PatientDashboard() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [showBookingDialog, setShowBookingDialog] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState('');
+  const [availableDoctors, setAvailableDoctors] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
 
   useEffect(() => {
-    const currentPatient = {
+    // Load patient data using dataService
+    const patients = dataService.getPatients();
+    const currentPatient = patients.find(p => p.id === '1') || {
       id: '1',
       name: 'Pree Om',
       age: 28,
@@ -36,19 +38,11 @@ export default function PatientDashboard() {
       updatedAt: new Date().toISOString(),
       dataToken: 'TOKEN123456'
     };
+
     setPatient(currentPatient);
-
-    const doctors = [{
-      id: 'd1',
-      name: 'Dr. Rajesh Khanna',
-      specialty: 'Cardiology',
-      license: 'MD123456',
-      phone: '+91-9876543210'
-    }];
+    setAssignedDoctors([]);
     
-    setAssignedDoctors(doctors.filter(d => d.id === currentPatient.assignedDoctor));
-
-    // Load both doctor reports and patient health reports
+    // Load reports
     const doctorReports = [
       { id: 'RPT001', patientId: '1', doctorId: 'd1', status: 'COMPLETED', date: '2024-01-15', content: 'Initial consultation completed', type: 'DOCTOR' },
       { id: 'RPT002', patientId: '1', doctorId: 'd1', status: 'PENDING', date: '2024-01-16', content: 'Follow-up required', type: 'DOCTOR' }
@@ -127,6 +121,64 @@ export default function PatientDashboard() {
                     <p className="text-sm text-gray-600">
                       <strong>Current Symptoms:</strong> {patient?.symptoms?.join(', ')}
                     </p>
+                    {patient?.assignedDoctor && (
+                      <p className="text-sm text-gray-600 mt-2">Assigned Doctor: <strong>{patient.assignedDoctor.name}</strong></p>
+                    )}
+                    {patient?.case && (
+                      <p className="text-sm text-gray-600 mt-2">Case status: <strong>{patient.case.status}</strong></p>
+                    )}
+                    <div className="mt-3">
+                      <div className="flex gap-2 mt-3">
+                        <Select onValueChange={(doctorId) => {
+                          const doctors = [
+                            { id: 'dr1', name: 'Dr. Rajesh Kumar', specialty: 'Cardiologist' },
+                            { id: 'dr2', name: 'Dr. Priya Sharma', specialty: 'Dermatologist' },
+                            { id: 'dr3', name: 'Dr. Amit Singh', specialty: 'Orthopedic' },
+                            { id: 'dr4', name: 'Dr. Sunita Patel', specialty: 'Gynecologist' },
+                            { id: 'dr5', name: 'Dr. Ravi Gupta', specialty: 'ENT Specialist' },
+                            { id: 'dr6', name: 'Dr. Meera Joshi', specialty: 'Ophthalmologist' },
+                            { id: 'dr7', name: 'Dr. Vikram Rao', specialty: 'Neurologist' },
+                            { id: 'dr8', name: 'Dr. Kavita Nair', specialty: 'General Medicine' }
+                          ];
+                          
+                          const selectedDoctor = doctors.find(d => d.id === doctorId);
+                          
+                          if (selectedDoctor) {
+                            const preference = {
+                              id: `PREF_${Date.now()}`,
+                              patientId: patient.id,
+                              patientName: patient.name,
+                              preferredDoctorId: selectedDoctor.id,
+                              preferredDoctorName: selectedDoctor.name,
+                              preferredDoctorSpecialty: selectedDoctor.specialty,
+                              requestedAt: new Date().toISOString(),
+                              status: 'PENDING'
+                            };
+                            
+                            const preferences = JSON.parse(localStorage.getItem('doctorPreferences') || '[]');
+                            preferences.push(preference);
+                            localStorage.setItem('doctorPreferences', JSON.stringify(preferences));
+                            
+                            alert(`Doctor preference sent to medical team:\n\nPreferred Doctor: ${selectedDoctor.name}\nSpecialty: ${selectedDoctor.specialty}\nStatus: Pending Review`);
+                          }
+                        }}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Doctor Preference" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dr1">Dr. Rajesh Kumar - Cardiologist</SelectItem>
+                            <SelectItem value="dr2">Dr. Priya Sharma - Dermatologist</SelectItem>
+                            <SelectItem value="dr3">Dr. Amit Singh - Orthopedic</SelectItem>
+                            <SelectItem value="dr4">Dr. Sunita Patel - Gynecologist</SelectItem>
+                            <SelectItem value="dr5">Dr. Ravi Gupta - ENT Specialist</SelectItem>
+                            <SelectItem value="dr6">Dr. Meera Joshi - Ophthalmologist</SelectItem>
+                            <SelectItem value="dr7">Dr. Vikram Rao - Neurologist</SelectItem>
+                            <SelectItem value="dr8">Dr. Kavita Nair - General Medicine</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button variant="outline" className="ml-2" onClick={() => alert('Open patient view')}>View</Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -260,19 +312,6 @@ export default function PatientDashboard() {
                         else if (symptoms.includes('bone') || symptoms.includes('joint')) specialist = 'Orthopedics';
                         else if (symptoms.includes('stomach') || symptoms.includes('digest')) specialist = 'Gastroenterology';
                         
-                        // LangChain routing in background
-                        langchainMedical.routeToSpecialist(healthInput, healthInput)
-                          .then(routing => {
-                            let enhancedSpecialist = specialist;
-                            if (routing.includes('Cardiology')) enhancedSpecialist = 'Cardiology';
-                            else if (routing.includes('Dermatology')) enhancedSpecialist = 'Dermatology';
-                            else if (routing.includes('Neurology')) enhancedSpecialist = 'Neurology';
-                            else if (routing.includes('Orthopedics')) enhancedSpecialist = 'Orthopedics';
-                            else if (routing.includes('Gastroenterology')) enhancedSpecialist = 'Gastroenterology';
-                            localStorage.setItem('lastAssignedSpecialist', enhancedSpecialist);
-                          })
-                          .catch(error => console.error('LangChain routing error:', error));
-                        
                         localStorage.setItem('healthReports', JSON.stringify(existingReports));
                         localStorage.setItem('lastAssignedSpecialist', specialist);
                         
@@ -289,7 +328,7 @@ export default function PatientDashboard() {
                         if (selectedImage) {
                           const reader = new FileReader();
                           reader.onload = (e) => {
-                            healthReport.imageData = e.target.result;
+                            (healthReport as any).imageData = (e.target as any).result;
                             // Update localStorage with image data
                             const updatedReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
                             const reportIndex = updatedReports.findIndex(r => r.id === healthReport.id);
@@ -312,7 +351,7 @@ export default function PatientDashboard() {
                         }
                         
                         // Store healthReport in component state for dialog access
-                        window.currentHealthReport = healthReport;
+                        (window as any).currentHealthReport = healthReport;
                         
                         // Clear form first
                         setHealthInput('');
@@ -610,11 +649,19 @@ export default function PatientDashboard() {
                 
                 <div className="flex gap-2 mt-4">
                   <Button 
-                    onClick={() => {
+                    onClick={async () => {
                       if (selectedDoctor && selectedDate && selectedTime) {
                         const doctor = assignedDoctors.find(d => d.id === selectedDoctor);
+                        // Determine specialist locally
+                        let specialist = 'General Medicine';
+                        const symptoms = (patient.symptoms || []).map(s => s.toLowerCase()).join(' ');
+                        if (symptoms.includes('heart') || symptoms.includes('chest')) specialist = 'Cardiology';
+                        else if (symptoms.includes('skin') || symptoms.includes('rash')) specialist = 'Dermatology';
+                        else if (symptoms.includes('bone') || symptoms.includes('joint')) specialist = 'Orthopedics';
+                        else if (symptoms.includes('stomach') || symptoms.includes('digest')) specialist = 'Gastroenterology';
                         
                         // Save appointment to localStorage
+                        const currentHealthReport = (window as unknown as Record<string, unknown>).currentHealthReport as Record<string, unknown> | undefined;
                         const appointment = {
                           id: `APT_${Date.now()}`,
                           patientId: patient.id,
@@ -626,17 +673,36 @@ export default function PatientDashboard() {
                           time: selectedTime,
                           status: 'SCHEDULED',
                           phone: patient.phone,
-                          linkedHealthReportId: window.currentHealthReport?.id,
+                          linkedHealthReportId: currentHealthReport?.id,
                           assignedSpecialist: specialist
                         };
                         
-                        const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
-                        appointments.push(appointment);
-                        localStorage.setItem('appointments', JSON.stringify(appointments));
+                        try {
+                          const res = await fetch('/api/appointments', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(appointment)
+                          });
+                          const json = await res.json();
+                          if (json.success) {
+                            // keep local fallback for offline
+                            const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+                            appointments.push({ ...appointment, _id: json.data._id });
+                            localStorage.setItem('appointments', JSON.stringify(appointments));
+                          } else {
+                            const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+                            appointments.push(appointment);
+                            localStorage.setItem('appointments', JSON.stringify(appointments));
+                          }
+                        } catch (e) {
+                          const appointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+                          appointments.push(appointment);
+                          localStorage.setItem('appointments', JSON.stringify(appointments));
+                        }
                         
                         // Link appointment to health report
                         const updatedReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
-                        const reportIndex = updatedReports.findIndex(r => r.id === window.currentHealthReport?.id);
+                        const reportIndex = updatedReports.findIndex(r => r.id === currentHealthReport?.id);
                         if (reportIndex !== -1) {
                           updatedReports[reportIndex].linkedAppointmentId = appointment.id;
                           localStorage.setItem('healthReports', JSON.stringify(updatedReports));

@@ -141,7 +141,7 @@ export default function SelfServiceScheduling() {
                   <li>• 2-hour reminder with location</li>
                 </ul>
               </div>
-              <Button onClick={() => window.location.href = '/patient-dashboard'} className="w-full">
+              <Button onClick={() => window.location.href = '/dashboard'} className="w-full">
                 Go to Dashboard
               </Button>
             </div>

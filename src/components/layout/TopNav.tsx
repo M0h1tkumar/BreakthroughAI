@@ -36,9 +36,11 @@ export function TopNav({ sidebarCollapsed = false }: TopNavProps) {
   }, []);
 
   const handleLogout = () => {
-    authService.logout();
-    setCurrentUser(null);
-    navigate('/login');
+    if (window.confirm('Are you sure you want to log out?')) {
+      authService.logout();
+      setCurrentUser(null);
+      navigate('/login');
+    }
   };
 
   const getUserDisplayName = () => {

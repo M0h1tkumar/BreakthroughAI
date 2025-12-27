@@ -7,10 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, Search, Phone, Calendar, FileText, Eye, Edit, CheckCircle, XCircle, Download } from 'lucide-react';
-import { secureDB } from '@/lib/secureDatabase';
-import { tokenizationService } from '@/lib/dataTokenization';
-import { ToastService } from '@/components/ui/toast-notification';
-import { authService } from '@/lib/auth';
+import { dataService } from '@/lib/dataService';
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState([]);
@@ -23,36 +20,51 @@ export default function PatientsPage() {
   const [showPatientDetailsDialog, setShowPatientDetailsDialog] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState('');
+  const [assignedDoctors, setAssignedDoctors] = useState({});
 
   useEffect(() => {
     refreshPatients();
+    
+    // Listen for real-time updates
+    const handlePatientsUpdate = (event: any) => {
+      setPatients(event.detail);
+      setFilteredPatients(event.detail);
+    };
+    
+    const handleAppointmentsUpdate = (event: any) => {
+      setAppointments(event.detail);
+    };
+    
+    const handleDoctorAssignmentsUpdate = (event: any) => {
+      setAssignedDoctors(event.detail);
+    };
+    
+    window.addEventListener('patientsUpdated', handlePatientsUpdate);
+    window.addEventListener('appointmentsUpdated', handleAppointmentsUpdate);
+    window.addEventListener('doctorAssignmentsUpdated', handleDoctorAssignmentsUpdate);
+    
+    return () => {
+      window.removeEventListener('patientsUpdated', handlePatientsUpdate);
+      window.removeEventListener('appointmentsUpdated', handleAppointmentsUpdate);
+      window.removeEventListener('doctorAssignmentsUpdated', handleDoctorAssignmentsUpdate);
+    };
   }, []);
 
+  useEffect(() => {
+    handleSearch();
+  }, [selectedStatus, searchTerm, patients]);
+
   const refreshPatients = () => {
-    const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
-    const mockPatients = [
-      { id: '1', name: 'Pree Om', age: 28, symptoms: ['chest pain', 'shortness of breath'], phone: '+91-9853224443', status: 'UNDER_REVIEW', createdAt: new Date().toISOString(), reports: [], dataToken: 'TOKEN123456' },
-      { id: '2', name: 'Priya Sharma', age: 32, symptoms: ['headache'], phone: '098-765-4321', status: 'PENDING', createdAt: new Date().toISOString(), reports: [] }
-    ];
-    
-    const reportPatients = healthReports.map(report => ({
-      id: report.patientId,
-      name: report.patientName,
-      age: 25,
-      symptoms: [report.description],
-      phone: '+91-9853224443',
-      status: 'UNDER_REVIEW',
-      createdAt: new Date().toISOString(),
-      reports: [report],
-      dataToken: report.patientToken
-    }));
-    
-    const allPatients = [...mockPatients, ...reportPatients];
+    // Use centralized data service
+    const allPatients = dataService.getPatients();
     setPatients(allPatients);
     setFilteredPatients(allPatients);
     
-    const savedAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    const savedAppointments = dataService.getAppointments();
     setAppointments(savedAppointments);
+    
+    const savedAssignments = dataService.getAssignedDoctors();
+    setAssignedDoctors(savedAssignments);
   };
 
   const handleSearch = () => {
@@ -74,7 +86,10 @@ export default function PatientsPage() {
 
   const viewPatientDetails = (patientId: string) => {
     const patient = patients.find(p => p.id === patientId);
-    if (!patient) return;
+    if (!patient) {
+      alert('Patient not found');
+      return;
+    }
 
     setSelectedPatientForCase(patient);
     setShowPatientDetailsDialog(true);
@@ -100,11 +115,13 @@ export default function PatientsPage() {
   const handleDoctorAssignment = () => {
     if (!selectedDoctor || !selectedPatientForCase) return;
     
+    // Use centralized data service
+    dataService.assignDoctor(selectedPatientForCase.id, selectedDoctor);
+    
     alert(`Patient ${selectedPatientForCase.name} assigned to ${selectedDoctor}`);
     setShowAssignDialog(false);
     setSelectedDoctor('');
     setSelectedPatientForCase(null);
-    refreshPatients();
   };
 
   const updatePatient = (patientId: string) => {
@@ -118,19 +135,23 @@ export default function PatientsPage() {
   const approveCase = () => {
     if (!selectedPatientForCase) return;
     
-    alert(`✅ Case APPROVED for ${selectedPatientForCase.name}\n\nStatus: Treatment Completed\nDoctor: Dr. Rajesh Khanna\nDate: ${new Date().toLocaleDateString()}`);
+    // Use centralized data service to update patient status
+    dataService.updatePatient(selectedPatientForCase.id, { status: 'UNDER_REVIEW' });
+    
+    alert(`✅ CASE APPROVED\n\nPatient: ${selectedPatientForCase.name}\nStatus: Changed to Under Review\nDate: ${new Date().toLocaleDateString()}`);
     setShowCaseDialog(false);
     setSelectedPatientForCase(null);
-    refreshPatients();
   };
 
   const closeCase = () => {
     if (!selectedPatientForCase) return;
     
-    alert(`❌ Case CLOSED for ${selectedPatientForCase.name}\n\nReason: Treatment completed/Patient discharged\nDoctor: Dr. Rajesh Khanna\nDate: ${new Date().toLocaleDateString()}`);
+    // Use centralized data service to remove patient
+    dataService.removePatient(selectedPatientForCase.id);
+    
+    alert(`❌ CASE CLOSED\n\nPatient: ${selectedPatientForCase.name}\nStatus: Case Deleted\nDate: ${new Date().toLocaleDateString()}`);
     setShowCaseDialog(false);
     setSelectedPatientForCase(null);
-    refreshPatients();
   };
 
   return (
@@ -157,7 +178,10 @@ export default function PatientsPage() {
               <div className="flex gap-2">
                 <select 
                   value={selectedStatus} 
-                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedStatus(e.target.value);
+                    handleSearch();
+                  }}
                   className="px-3 py-2 border rounded-md"
                 >
                   <option value="ALL">All Status</option>
@@ -235,10 +259,20 @@ export default function PatientsPage() {
                       <Edit className="h-4 w-4 mr-1" />
                       Manage Case
                     </Button>
-                    {patient.status === 'PENDING' && (
+                    {patient.status === 'PENDING' && !assignedDoctors[patient.id] && (
                       <Button size="sm" onClick={() => assignToDoctor(patient.id)}>
                         Assign Doctor
                       </Button>
+                    )}
+                    {assignedDoctors[patient.id] && (
+                      <div className="text-sm">
+                        <Badge variant="default" className="bg-green-600">
+                          ✓ Doctor Assigned
+                        </Badge>
+                        <p className="text-xs text-green-700 mt-1">
+                          {assignedDoctors[patient.id]}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -329,28 +363,29 @@ export default function PatientsPage() {
         <Dialog open={showPatientDetailsDialog} onOpenChange={setShowPatientDetailsDialog}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Patient Details</DialogTitle>
+              <DialogTitle>Patient Details - {selectedPatientForCase?.name || 'Loading...'}</DialogTitle>
             </DialogHeader>
-            {selectedPatientForCase && (
+            {selectedPatientForCase ? (
               <div className="space-y-4">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-medium text-blue-800 mb-2">{selectedPatientForCase.name}</h3>
+                  <h3 className="font-medium text-blue-800 mb-3">Patient Information</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
+                      <p><strong>Name:</strong> {selectedPatientForCase.name}</p>
                       <p><strong>Age:</strong> {selectedPatientForCase.age}</p>
                       <p><strong>Phone:</strong> {selectedPatientForCase.phone}</p>
-                      <p><strong>Status:</strong> {selectedPatientForCase.status}</p>
                     </div>
                     <div>
-                      <p><strong>Token:</strong> {selectedPatientForCase.dataToken}</p>
+                      <p><strong>Status:</strong> {selectedPatientForCase.status}</p>
+                      <p><strong>Token:</strong> {selectedPatientForCase.dataToken || 'N/A'}</p>
                       <p><strong>Created:</strong> {new Date(selectedPatientForCase.createdAt).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </div>
                 
                 <div className="bg-gray-50 border rounded-lg p-4">
-                  <h4 className="font-medium mb-2">Problem Description</h4>
-                  <p className="text-sm text-gray-700">
+                  <h4 className="font-medium mb-3">Symptoms & Description</h4>
+                  <p className="text-sm text-gray-700 mb-2">
                     <strong>Symptoms:</strong> {selectedPatientForCase.symptoms.join(', ')}
                   </p>
                   {selectedPatientForCase.reports && selectedPatientForCase.reports.length > 0 && (
@@ -364,7 +399,7 @@ export default function PatientsPage() {
                 
                 {selectedPatientForCase.reports && selectedPatientForCase.reports.some(r => r.image || r.imageData) && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="font-medium mb-3 text-green-800">Patient Images</h4>
+                    <h4 className="font-medium mb-3 text-green-800">Medical Images</h4>
                     <div className="space-y-3">
                       {selectedPatientForCase.reports.map((report, index) => (
                         (report.image || report.imageData) && (
@@ -403,7 +438,7 @@ export default function PatientsPage() {
                   </div>
                 )}
                 
-                <div className="flex gap-2">
+                <div className="flex gap-2 pt-4">
                   <Button 
                     onClick={() => {
                       setShowPatientDetailsDialog(false);
@@ -420,6 +455,10 @@ export default function PatientsPage() {
                     Close
                   </Button>
                 </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p>Loading patient details...</p>
               </div>
             )}
           </DialogContent>

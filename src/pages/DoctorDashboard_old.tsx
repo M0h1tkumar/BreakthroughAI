@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { secureDB } from '@/lib/secureDatabase';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Users, Brain, FileText, AlertTriangle, Video, Pill, Send, Calendar, Clock, MapPin, Phone } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { dataService } from '@/lib/dataService';
+import { langchainMedical } from '../lib/langchainMedical';
 
 export default function DoctorDashboard() {
   const [patients, setPatients] = useState([]);
@@ -28,7 +29,8 @@ export default function DoctorDashboard() {
   const [showPatientDetails, setShowPatientDetails] = useState(false);
   const [selectedPatientForDetails, setSelectedPatientForDetails] = useState(null);
   const [emergencies, setEmergencies] = useState([]);
-  const [editingAppointment, setEditingAppointment] = useState(null);
+  // Appointment edit/cancel state
+  const [editingAppointment, setEditingAppointment] = useState<unknown>(null);
   const [showEditAppointment, setShowEditAppointment] = useState(false);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
@@ -38,13 +40,13 @@ export default function DoctorDashboard() {
   const [assignedDoctors, setAssignedDoctors] = useState({});
   const [showManageCase, setShowManageCase] = useState(false);
   const [selectedPatientForCase, setSelectedPatientForCase] = useState(null);
-  const [doctorPreferences, setDoctorPreferences] = useState([]);
 
   const viewPatientDetails = (patient) => {
     setSelectedPatientForDetails(patient);
     setShowPatientDetails(true);
   };
 
+  // Open patient details when a patientId query param is present (from SearchPage)
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -53,8 +55,11 @@ export default function DoctorDashboard() {
     const pid = params.get('patientId');
     if (!pid) return;
 
-    const match = patients.find(p => p.id === pid);
+    console.debug('[DoctorDashboard] patientId query param detected:', pid);
+
+  const match = patients.find(p => p.id === pid);
     if (match) {
+      console.debug('[DoctorDashboard] Found patient in state:', match.name || match.id);
       setSelectedPatientForDetails(match);
       setShowPatientDetails(true);
       params.delete('patientId');
@@ -62,59 +67,99 @@ export default function DoctorDashboard() {
       return;
     }
 
+    // Fallback: try secureDB.getPatientById immediately
     try {
-      const p = dataService.getPatients().find(patient => patient.id === pid);
+      const p = secureDB.getPatientById(pid);
       if (p) {
-        setSelectedPatientForDetails(p);
+        console.debug('[DoctorDashboard] Found patient via secureDB.getPatientById:', p.name || p.id);
+  setSelectedPatientForDetails(p);
         setShowPatientDetails(true);
         params.delete('patientId');
         navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
         return;
+      } else {
+        console.debug('[DoctorDashboard] Patient not found in secureDB for id:', pid);
       }
     } catch (e) {
-      console.error('Error looking up patientId in dataService', e);
+      console.error('[DoctorDashboard] error looking up patientId in secureDB', e);
     }
+    
   }, [location.search, patients, navigate, location.pathname]);
 
   useEffect(() => {
     const loadPatientData = () => {
-      const allPatients = dataService.getPatients();
-      const patientsWithPriority = allPatients.map(patient => ({
-        ...patient,
-        priority: patient.priority || (patient.symptoms.some(s => s.includes('chest pain') || s.includes('shortness of breath')) ? 'HIGH' : 'MEDIUM')
-      })).sort((a, b) => {
-        const priorityOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 };
-        return priorityOrder[b.priority] - priorityOrder[a.priority];
-      });
+      // Load patients with priority
+      const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]');
+      const mockPatients = [
+        { id: '1', name: 'Pree Om', age: 28, symptoms: ['chest pain', 'shortness of breath'], phone: '+91-9853224443', priority: 'HIGH', dataToken: 'TOKEN123456' },
+        { id: '2', name: 'Priya Sharma', age: 32, symptoms: ['headache'], phone: '098-765-4321', priority: 'MEDIUM' }
+      ];
       
-      setPatients(patientsWithPriority);
-      setAppointments(dataService.getAppointments());
-      setEmergencies(dataService.getEmergencies());
-      setAssignedDoctors(dataService.getAssignedDoctors());
+      // Add health reports as patients with real-time updates
+      const reportPatients = healthReports.map(report => ({
+        id: report.patientId,
+        name: report.patientName,
+        symptoms: [report.description],
+        phone: '+91-9853224443',
+        priority: 'HIGH',
+        dataToken: report.patientToken,
+        healthReport: report,
+        image: report.image,
+        imageData: report.imageData,
+        lastUpdated: report.timestamp
+      }));
       
-      const preferences = JSON.parse(localStorage.getItem('doctorPreferences') || '[]');
-      setDoctorPreferences(preferences);
+      const allPatients = [...mockPatients, ...reportPatients]
+        .sort((a, b) => {
+          const priorityOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+          return priorityOrder[b.priority] - priorityOrder[a.priority];
+        });
+      
+      setPatients(allPatients);
+      
+      // Load appointments from backend, fallback to localStorage
+      const loadAppointments = async () => {
+        try {
+          const res = await fetch('/api/appointments');
+          const json = await res.json();
+          if (json.success) {
+            setAppointments(json.data || []);
+          } else {
+            const savedAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+            setAppointments(savedAppointments);
+          }
+        } catch (e) {
+          const savedAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+          setAppointments(savedAppointments);
+        }
+      };
+      loadAppointments();
+      
+      // Load emergencies from localStorage
+      const savedEmergencies = JSON.parse(localStorage.getItem('emergencies') || '[]');
+      setEmergencies(savedEmergencies);
+      
+      // Load assigned doctors from localStorage
+      const savedAssignments = JSON.parse(localStorage.getItem('assignedDoctors') || '{}');
+      setAssignedDoctors(savedAssignments);
     };
 
+    // Initial load
     loadPatientData();
 
-    const handlePatientsUpdate = () => loadPatientData();
-    const handleAppointmentsUpdate = (event) => setAppointments(event.detail);
-    const handleEmergenciesUpdate = (event) => setEmergencies(event.detail);
-    const handleDoctorAssignmentsUpdate = (event) => setAssignedDoctors(event.detail);
+    // Set up real-time polling for patient updates
+    const interval = setInterval(loadPatientData, 1000); // Check every 1 second for real-time updates
+
+    // Listen for patient report events
+    const handlePatientReportUpdate = () => {
+      loadPatientData();
+    };
     
-    window.addEventListener('patientsUpdated', handlePatientsUpdate);
-    window.addEventListener('appointmentsUpdated', handleAppointmentsUpdate);
-    window.addEventListener('emergenciesUpdated', handleEmergenciesUpdate);
-    window.addEventListener('doctorAssignmentsUpdated', handleDoctorAssignmentsUpdate);
-    window.addEventListener('patientReportUpdated', handlePatientsUpdate);
+    window.addEventListener('patientReportUpdated', handlePatientReportUpdate);
 
     return () => {
-      window.removeEventListener('patientsUpdated', handlePatientsUpdate);
-      window.removeEventListener('appointmentsUpdated', handleAppointmentsUpdate);
-      window.removeEventListener('emergenciesUpdated', handleEmergenciesUpdate);
-      window.removeEventListener('doctorAssignmentsUpdated', handleDoctorAssignmentsUpdate);
-      window.removeEventListener('patientReportUpdated', handlePatientsUpdate);
+      clearInterval(interval);
+      window.removeEventListener('patientReportUpdated', handlePatientReportUpdate);
     };
   }, []);
 
@@ -124,8 +169,42 @@ export default function DoctorDashboard() {
     alert(`Video call initiated with ${patient.name}\nPhone: ${patient.phone}\nMeeting link opened in new tab`);
   };
 
+  const persistAppointments = (updatedAppointments) => {
+    try {
+      // Try to sync to server for each appointment changed by id
+      updatedAppointments.forEach(async (apt) => {
+        try {
+          if (apt._id) {
+            await fetch(`/api/appointments/${apt._id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(apt)
+            });
+          }
+        } catch (e) {
+          // ignore individual sync failures
+        }
+      });
+      localStorage.setItem('appointments', JSON.stringify(updatedAppointments));
+    } catch (e) {
+      console.error('Failed to persist appointments', e);
+    }
+  };
+
   const cancelAppointment = (appointmentId) => {
-    dataService.updateAppointment(appointmentId, { status: 'CANCELLED' });
+    setAppointments(prev => {
+      const updated = prev.map(a => a.id === appointmentId ? { ...a, status: 'CANCELLED' } : a);
+      // try API cancel
+      (async () => {
+        try {
+          await fetch(`/api/appointments/${appointmentId}/cancel`, { method: 'POST' });
+        } catch (e) {
+          console.error('API cancel failed', e);
+        }
+      })();
+      persistAppointments(updated);
+      return updated;
+    });
   };
 
   const openEditAppointment = (appointment) => {
@@ -138,29 +217,63 @@ export default function DoctorDashboard() {
 
   const saveEditedAppointment = () => {
     if (!editingAppointment) return;
-    const editingId = editingAppointment.id;
+    const editing = editingAppointment as Record<string, unknown>;
+    const editingId = typeof editing['id'] === 'string' ? (editing['id'] as string) : null;
     if (!editingId) return;
-    
-    dataService.updateAppointment(editingId, {
-      date: editDate,
-      time: editTime,
-      phone: editPhone
+    setAppointments(prev => {
+      const updated = prev.map(a => {
+        if (a.id === editingId || a._id === editingId) {
+          return { ...a, date: editDate, time: editTime, phone: editPhone, status: a.status === 'CANCELLED' ? 'CANCELLED' : 'SCHEDULED' };
+        }
+        return a;
+      });
+      // call API
+      (async () => {
+        try {
+          await fetch(`/api/appointments/${editingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: editDate, time: editTime, phone: editPhone })
+          });
+        } catch (e) {
+          console.error('API update failed', e);
+        }
+      })();
+      persistAppointments(updated);
+      return updated;
     });
-    
     setShowEditAppointment(false);
     setEditingAppointment(null);
   };
 
   const generateAIReport = async (patient) => {
     try {
-      const symptoms = patient.symptoms.join(', ');
-      const fallbackReport = `AI DIAGNOSIS REPORT\n\nPatient: ${patient.name}\nSymptoms: ${symptoms}\n\nAI analysis for clinical decision support.\n\n--- MEDICAL DISCLAIMER ---\nThis AI analysis is for clinical decision support only.`;
-      setAiReport(fallbackReport);
+      // Use LangChain for structured medical reasoning
+      const diagnosis = await langchainMedical.generateDiagnosis({
+        age: patient.age?.toString() || '30',
+        gender: 'Not specified',
+        symptoms: patient.symptoms.join(', '),
+        history: 'None reported'
+      });
+      
+      // Emergency triage if high priority
+      if (patient.priority === 'HIGH') {
+        const triage = await langchainMedical.triageEmergency({
+          symptoms: patient.symptoms.join(', '),
+          vitals: 'BP: 120/80, HR: 72, Temp: 98.6°F',
+          age: patient.age?.toString() || '30'
+        });
+        
+        setAiReport(`${diagnosis}\n\n--- EMERGENCY TRIAGE ASSESSMENT ---\n${triage}`);
+      } else {
+        setAiReport(diagnosis);
+      }
+      
       setShowDisclaimer(false);
     } catch (error) {
-      console.error('AI Report Error:', error);
+      console.error('LangChain AI Report Error:', error);
       const symptoms = patient.symptoms.join(', ');
-      const fallbackReport = `AI DIAGNOSIS REPORT\n\nPatient: ${patient.name}\nSymptoms: ${symptoms}\n\nAI analysis temporarily unavailable.\nUsing fallback diagnostic support.\n\n--- MEDICAL DISCLAIMER ---\nThis AI analysis is for clinical decision support only.`;
+      const fallbackReport = `LANGCHAIN AI DIAGNOSIS REPORT\n\nPatient: ${patient.name}\nSymptoms: ${symptoms}\n\nLangChain analysis temporarily unavailable.\nUsing fallback diagnostic support.\n\n--- MEDICAL DISCLAIMER ---\nThis AI analysis is for clinical decision support only.`;
       setAiReport(fallbackReport);
       setShowDisclaimer(false);
     }
@@ -170,6 +283,22 @@ export default function DoctorDashboard() {
     if (!prescriptionText && !selectedMedicine) {
       alert('Please add prescription details');
       return;
+    }
+    
+    // LangChain prescription validation
+    try {
+      const validation = await langchainMedical.validatePrescription({
+        medication: selectedMedicine,
+        dosage: dosage,
+        age: selectedPatient.age?.toString() || '30',
+        weight: '70kg',
+        allergies: 'None reported',
+        currentMeds: 'None reported'
+      });
+      
+      console.log('Prescription Validation:', validation);
+    } catch (error) {
+      console.error('Prescription validation error:', error);
     }
     
     const prescription = {
@@ -187,10 +316,24 @@ export default function DoctorDashboard() {
       status: 'ACTIVE'
     };
     
-    dataService.addPrescription(prescription);
+    // Save to localStorage for pharmacy
+    const prescriptions = JSON.parse(localStorage.getItem('prescriptions') || '[]');
+    prescriptions.push(prescription);
+    localStorage.setItem('prescriptions', JSON.stringify(prescriptions));
     
-    alert(`✅ PRESCRIPTION SENT IN REAL-TIME!\n\nPatient: ${selectedPatient.name}\nMedicine: ${selectedMedicine}\nDosage: ${dosage}\nDuration: ${duration}\n\n📱 Instantly delivered to patient\n🏥 Instantly sent to pharmacy\n⚡ Real-time synchronization complete`);
+    // Real-time notification
+    alert(`✅ PRESCRIPTION SENT IN REAL-TIME!
+
+Patient: ${selectedPatient.name}
+Medicine: ${selectedMedicine}
+Dosage: ${dosage}
+Duration: ${duration}
+
+📱 Instantly delivered to patient
+🏥 Instantly sent to pharmacy
+⚡ Real-time synchronization complete`);
     
+    // Trigger immediate refresh of patient data
     setTimeout(() => {
       const event = new CustomEvent('prescriptionSent');
       window.dispatchEvent(event);
@@ -213,7 +356,13 @@ export default function DoctorDashboard() {
   const handleDoctorAssignment = () => {
     if (!selectedDoctor || !selectedPatient) return;
     
-    dataService.assignDoctor(selectedPatient.id, selectedDoctor);
+    // Save to localStorage first
+    const currentAssignments = JSON.parse(localStorage.getItem('assignedDoctors') || '{}');
+    currentAssignments[selectedPatient.id] = selectedDoctor;
+    localStorage.setItem('assignedDoctors', JSON.stringify(currentAssignments));
+    
+    // Force state update with new object reference
+    setAssignedDoctors({...currentAssignments});
     
     alert(`Patient ${selectedPatient.name} assigned to ${selectedDoctor}`);
     setShowAssignDialog(false);
@@ -229,7 +378,8 @@ export default function DoctorDashboard() {
   const closeCase = () => {
     if (!selectedPatientForCase) return;
     
-    dataService.removePatient(selectedPatientForCase.id);
+    // Remove patient from the list
+    setPatients(prev => prev.filter(p => p.id !== selectedPatientForCase.id));
     
     alert(`✅ PATIENT DISCHARGED\n\nPatient: ${selectedPatientForCase.name}\nStatus: Case Closed - Discharged\nDate: ${new Date().toLocaleDateString()}\nTime: ${new Date().toLocaleTimeString()}`);
     
@@ -267,55 +417,6 @@ export default function DoctorDashboard() {
             </Badge>
           </div>
         </div>
-
-        {doctorPreferences.length > 0 && (
-          <Card className="border-blue-200 bg-blue-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-blue-700">
-                <Users className="h-5 w-5" />
-                📝 Doctor Preference Requests ({doctorPreferences.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {doctorPreferences.map((preference) => (
-                  <div key={preference.id} className="bg-white border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant="outline">PREFERENCE REQUEST</Badge>
-                          <span className="text-sm text-gray-600">
-                            {new Date(preference.requestedAt).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="font-medium text-blue-800 mb-2">Patient: {preference.patientName}</p>
-                        <p className="text-sm text-blue-700">Preferred Doctor: {preference.preferredDoctor}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => {
-                          const updatedPreferences = doctorPreferences.filter(p => p.id !== preference.id);
-                          setDoctorPreferences(updatedPreferences);
-                          localStorage.setItem('doctorPreferences', JSON.stringify(updatedPreferences));
-                          alert(`Doctor preference approved for ${preference.patientName}`);
-                        }}>
-                          Approve
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => {
-                          const updatedPreferences = doctorPreferences.filter(p => p.id !== preference.id);
-                          setDoctorPreferences(updatedPreferences);
-                          localStorage.setItem('doctorPreferences', JSON.stringify(updatedPreferences));
-                          alert(`Doctor preference declined for ${preference.patientName}`);
-                        }}>
-                          Decline
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {emergencies.length > 0 && (
           <Card className="border-red-200 bg-red-50">

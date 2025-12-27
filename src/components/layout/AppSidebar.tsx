@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from '@/components/NavLink';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   LayoutDashboard, 
   Users, 
@@ -21,6 +22,7 @@ import breakthroughLogo from '@/assets/breakthrough-logo.jpeg';
 export function AppSidebar() {
   const navigate = useNavigate();
   const [user, setUser] = useState(authService.getCurrentUser());
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   
   useEffect(() => {
     const unsubscribe = authService.onUserChange((user) => {
@@ -31,9 +33,14 @@ export function AppSidebar() {
   }, []);
   
   const handleLogout = () => {
+    setShowLogoutDialog(true);
+  };
+
+  const confirmLogout = () => {
     authService.logout();
     setUser(null);
     navigate('/login');
+    setShowLogoutDialog(false);
   };
 
   const menuItems = [
@@ -127,7 +134,7 @@ export function AppSidebar() {
               key={item.path}
               to={item.path}
               icon={item.icon}
-              className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+              className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
             >
               {item.label}
             </NavLink>
@@ -151,12 +158,34 @@ export function AppSidebar() {
           variant="ghost" 
           size="sm" 
           onClick={handleLogout}
-          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
         >
           <LogOut className="h-4 w-4 mr-2" />
           Logout
         </Button>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Logout</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Are you sure you want to log out? You will need to sign in again to access your account.
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={confirmLogout} variant="destructive" className="flex-1">
+                Yes, Logout
+              </Button>
+              <Button onClick={() => setShowLogoutDialog(false)} variant="outline" className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

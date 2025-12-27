@@ -26,7 +26,7 @@ export default function LoginPage() {
     if (user) {
       // Create patient account with Google data
       authService.login(user.email, 'google_auth', 'patient');
-      window.location.href = '/patient-dashboard';
+  window.location.href = '/patient';
     }
   };
 
@@ -94,9 +94,9 @@ export default function LoginPage() {
     const success = authService.login(email, password, role);
     if (success) {
       const routes = {
-        patient: '/patient-dashboard',
-        doctor: '/doctor-dashboard', 
-        pharmacy: '/pharmacy-dashboard'
+  patient: '/patient',
+  doctor: '/doctor', 
+  pharmacy: '/pharmacy'
       };
       window.location.href = routes[role];
     } else {

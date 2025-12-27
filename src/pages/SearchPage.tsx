@@ -7,13 +7,34 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Users, FileText, Pill, Filter } from 'lucide-react';
 import { secureDB } from '@/lib/secureDatabase';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ToastService } from '@/components/ui/toast-notification';
+import { useNavigate } from 'react-router-dom';
+
+// Lightweight local types
+type Patient = {
+  id: string;
+  name: string;
+  age?: number;
+  phone?: string;
+  symptoms?: string[];
+  status?: string;
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  dataToken?: string;
+  image?: string;
+  imageData?: string;
+  healthReport?: unknown;
+  lastUpdated?: string;
+};
+
+type Medicine = { id: string; name: string; category?: string; manufacturer?: string; price?: number; stock?: number };
+type Report = { id: string; content: string; status?: string };
 
 export default function SearchPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [patientResults, setPatientResults] = useState<any[]>([]);
-  const [medicineResults, setMedicineResults] = useState<any[]>([]);
-  const [reportResults, setReportResults] = useState<any[]>([]);
+  const [patientResults, setPatientResults] = useState<Patient[]>([]);
+  const [medicineResults, setMedicineResults] = useState<Medicine[]>([]);
+  const [reportResults, setReportResults] = useState<Report[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   const handleGlobalSearch = async () => {
@@ -25,9 +46,34 @@ export default function SearchPage() {
     setIsSearching(true);
     
     try {
-      // Search patients
-      const patients = secureDB.searchPatients(searchTerm);
-      setPatientResults(patients);
+      // Search patients and enrich with priority from healthReports (keep in sync with DoctorDashboard)
+      const patients = secureDB.searchPatients(searchTerm) as Patient[];
+      try {
+        const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]') as Array<Record<string, unknown>>;
+        const enriched = patients.map(p => {
+          const copy: Patient = { ...p };
+          const match = healthReports.find(rec => {
+            const pid = rec['patientId'];
+            const pname = rec['patientName'];
+            return (typeof pid === 'string' && pid === copy.id) || (typeof pname === 'string' && pname === copy.name);
+          });
+          if (match) {
+            copy.priority = 'HIGH';
+            const t = match['patientToken']; if (typeof t === 'string') copy.dataToken = copy.dataToken || t;
+            const img = match['image']; if (typeof img === 'string') copy.image = copy.image || img;
+            const imgData = match['imageData']; if (typeof imgData === 'string') copy.imageData = copy.imageData || imgData;
+            copy.healthReport = match;
+          } else {
+            // demo fallbacks
+            if (copy.id === '1') copy.priority = 'HIGH';
+            else if (copy.id === '2') copy.priority = 'MEDIUM';
+          }
+          return copy;
+        });
+        setPatientResults(enriched);
+      } catch (e) {
+        setPatientResults(patients);
+      }
 
       // Search medicines
       const medicines = secureDB.searchMedicines(searchTerm);
@@ -50,10 +96,49 @@ export default function SearchPage() {
     }
   };
 
+  const navigate = useNavigate();
+
+  const [showPatientDetails, setShowPatientDetails] = useState(false);
+  const [selectedPatientForDetails, setSelectedPatientForDetails] = useState<Patient | null>(null);
+
   const viewPatient = (patientId: string) => {
-    const patient = secureDB.getPatients().find(p => p.id === patientId);
-    if (patient) {
-      alert(`Patient: ${patient.name}\nSymptoms: ${patient.symptoms.join(', ')}\nStatus: ${patient.status}`);
+    // Open in-page dialog with patient details. Try to find patient from search results or secureDB
+    const foundRaw = patientResults.find(p => p.id === patientId) || secureDB.getPatientById(patientId);
+    if (foundRaw) {
+      // clone and enrich with priority data from local sources to keep UI in-sync with dashboard
+      const found: Patient = { ...(foundRaw as Patient) };
+      try {
+        const healthReports = JSON.parse(localStorage.getItem('healthReports') || '[]') as Array<Record<string, unknown>>;
+        const match = healthReports.find(rec => {
+          const pid = rec['patientId'];
+          const pname = rec['patientName'];
+          return (typeof pid === 'string' && pid === found.id) || (typeof pname === 'string' && pname === found.name);
+        });
+        if (match) {
+          found.priority = 'HIGH';
+          found.healthReport = match;
+          const patientToken = match['patientToken'];
+          if (typeof patientToken === 'string' && !found.dataToken) found.dataToken = patientToken;
+          const img = match['image'];
+          if (typeof img === 'string') found.image = img;
+          const imgData = match['imageData'];
+          if (typeof imgData === 'string') found.imageData = imgData;
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+
+      // Fallback for the demo mock patients used in dashboard
+      if (!found.priority) {
+        if (found.id === '1') found.priority = 'HIGH';
+        else if (found.id === '2') found.priority = 'MEDIUM';
+        else found.priority = found.priority || 'LOW';
+      }
+
+      setSelectedPatientForDetails(found);
+      setShowPatientDetails(true);
+    } else {
+      ToastService.show('Patient details not found', 'error');
     }
   };
 
@@ -222,6 +307,55 @@ export default function SearchPage() {
             </TabsContent>
           </Tabs>
         )}
+
+                  <Dialog open={showPatientDetails} onOpenChange={setShowPatientDetails}>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Patient Details - {selectedPatientForDetails?.name}</DialogTitle>
+                      </DialogHeader>
+                      {selectedPatientForDetails && (
+                        <div className="space-y-4">
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h3 className="font-medium text-blue-800 mb-3">Patient Information</h3>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <p><strong>Name:</strong> {selectedPatientForDetails.name}</p>
+                              <p><strong>Age:</strong> {selectedPatientForDetails.age || 'Unknown'}</p>
+                              <p><strong>Phone:</strong> {selectedPatientForDetails.phone}</p>
+                            </div>
+                            <div>
+                              <p className="flex items-center gap-2"><strong>Priority:</strong>
+                                {(() => {
+                                  const p = selectedPatientForDetails.priority || 'N/A';
+                                  const cls = p === 'HIGH'
+                                    ? 'bg-red-600 text-white px-3 py-0.5 rounded-full text-sm font-semibold'
+                                    : p === 'MEDIUM'
+                                      ? 'bg-yellow-400 text-black px-3 py-0.5 rounded-full text-sm font-semibold'
+                                      : 'bg-gray-200 text-gray-800 px-3 py-0.5 rounded-full text-sm font-semibold';
+                                  return <span className={cls}>{p}</span>;
+                                })()}
+                              </p>
+                              <p><strong>Token:</strong> {selectedPatientForDetails.dataToken || 'N/A'}</p>
+                            </div>
+                          </div>
+                          </div>
+
+                          <div className="bg-gray-50 border rounded-lg p-4">
+                            <h4 className="font-medium mb-3">Symptoms & Medical History</h4>
+                            <p className="text-sm text-gray-700 mb-2">
+                              <strong>Current Symptoms:</strong> {selectedPatientForDetails.symptoms?.join(', ')}
+                            </p>
+                          </div>
+
+                          <div className="flex gap-2 pt-4">
+                            <Button onClick={() => setShowPatientDetails(false)}>
+                              Close
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
 
         {searchTerm && patientResults.length === 0 && medicineResults.length === 0 && reportResults.length === 0 && !isSearching && (
           <Card>
